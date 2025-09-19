@@ -159,10 +159,12 @@ class WebSocketService {
   }
 
   sendChatMessage(chatId, content, messageType = "TEXT") {
-    return this.sendMessage("/app/chat.sendMessage", {
+    const token = localStorage.getItem("token");
+    return this.sendMessage("/app/message.send", {
       chatId,
       content,
       messageType,
+      token : token,
     });
   }
 
