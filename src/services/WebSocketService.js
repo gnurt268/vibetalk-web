@@ -164,7 +164,7 @@ class WebSocketService {
       chatId,
       content,
       messageType,
-      token : token,
+      token: token,
     });
   }
 

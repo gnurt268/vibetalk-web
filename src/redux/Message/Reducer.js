@@ -126,6 +126,7 @@ const messageReducer = (state = initialState, action) => {
       return {
         ...state,
         loading: false,
+        messageLoading: false,
         messagesByChat: {
           ...state.messagesByChat,
           [getChatId]: {
@@ -144,6 +145,7 @@ const messageReducer = (state = initialState, action) => {
       return {
         ...state,
         loading: false,
+        messageLoading: false,
         error: action.payload,
       };
 

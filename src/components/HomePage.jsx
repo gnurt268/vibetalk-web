@@ -72,7 +72,7 @@ const HomePage = () => {
   const messageDraft =
     currentChat?.id && message ? selectMessageDraft(store, currentChat.id) : "";
   const isLoadingChats = chat?.loading || false;
-  const isLoadingMessages = message?.loading;
+  const isLoadingMessages = message?.messageLoading;
   const isSendingMessage = message?.sendingMessage;
 
   const open = Boolean(anchorEl);

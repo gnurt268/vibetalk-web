@@ -112,6 +112,10 @@ export const getChatMessages =
     try {
       dispatch({ type: GET_CHAT_MESSAGES });
 
+      if (page === 0) {
+        dispatch({ type: SET_MESSAGE_LOADING, payload: true });
+      }
+
       const params = page === 0 && size === 50 ? {} : { page, size };
 
       const response = await api.get(`/api/messages/chat/${chatId}`, {
@@ -129,12 +133,15 @@ export const getChatMessages =
         },
       });
 
+      dispatch({ type: SET_MESSAGE_LOADING, payload: false });
+
       return response.data;
     } catch (error) {
       dispatch({
         type: GET_CHAT_MESSAGES_ERROR,
         payload: error.response?.data?.message || error.message,
       });
+      dispatch({ type: SET_MESSAGE_LOADING, payload: false });
       throw error;
     }
   };
