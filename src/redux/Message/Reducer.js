@@ -466,9 +466,14 @@ const messageReducer = (state = initialState, action) => {
 
     case NEW_MESSAGE_RECEIVED:
       const receivedMessage = action.payload;
-      const receivedChatId = receivedMessage.chat.id;
+      const receivedChatId = receivedMessage.chat?.id;
 
-      return {
+      if (!receivedChatId) {
+        console.error("No chat ID in received message");
+        return state;
+      }
+
+      const newState = {
         ...state,
         messagesByChat: {
           ...state.messagesByChat,
@@ -481,6 +486,8 @@ const messageReducer = (state = initialState, action) => {
           },
         },
       };
+
+      return newState;
 
     case MESSAGE_UPDATED:
       const updatedMessage = action.payload;

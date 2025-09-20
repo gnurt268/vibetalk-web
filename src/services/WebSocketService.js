@@ -9,6 +9,7 @@ class WebSocketService {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 3000;
+    this.currentChatId = null;
   }
 
   connect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate) {
@@ -29,11 +30,15 @@ class WebSocketService {
           onConnect: (frame) => {
             this.connected = true;
             this.reconnectAttempts = 0;
-            this.setupSubscriptions(
-              onMessageReceived,
-              onTypingUpdate,
-              onPresenceUpdate
-            );
+
+            setTimeout(() => {
+              this.setupSubscriptions(
+                onMessageReceived,
+                onTypingUpdate,
+                onPresenceUpdate
+              );
+            }, 100);
+
             resolve(frame);
           },
 
@@ -69,47 +74,61 @@ class WebSocketService {
   }
 
   setupSubscriptions(onMessageReceived, onTypingUpdate, onPresenceUpdate) {
-    if (!this.client || !this.connected) return;
+    if (!this.client || !this.connected) {
+      console.warn("Cannot setup subscriptions - client not ready");
+      return;
+    }
 
-    const personalSubscription = this.client.subscribe(
-      "/user/queue/messages",
-      (message) => {
-        try {
-          const messageData = JSON.parse(message.body);
-          onMessageReceived(messageData);
-        } catch (error) {
-          console.error("Error parsing personal message:", error);
+    try {
+      const personalSubscription = this.client.subscribe(
+        "/user/queue/messages",
+        (message) => {
+          try {
+            const messageData = JSON.parse(message.body);
+            onMessageReceived(messageData);
+          } catch (error) {
+            console.error("Error parsing personal message:", error);
+          }
         }
-      }
-    );
+      );
 
-    const typingSubscription = this.client.subscribe(
-      "/topic/typing",
-      (message) => {
-        try {
-          const typingData = JSON.parse(message.body);
-          onTypingUpdate(typingData);
-        } catch (error) {
-          console.error("Error parsing typing message:", error);
+      const typingSubscription = this.client.subscribe(
+        "/user/queue/typing",
+        (message) => {
+          try {
+            const typingData = JSON.parse(message.body);
+            onTypingUpdate(typingData);
+          } catch (error) {
+            console.error("Error parsing typing message:", error);
+          }
         }
-      }
-    );
+      );
 
-    const presenceSubscription = this.client.subscribe(
-      "/topic/presence",
-      (message) => {
-        try {
-          const presenceData = JSON.parse(message.body);
-          onPresenceUpdate(presenceData);
-        } catch (error) {
-          console.error("Error parsing presence message:", error);
+      const presenceSubscription = this.client.subscribe(
+        "/topic/presence",
+        (message) => {
+          try {
+            const presenceData = JSON.parse(message.body);
+            onPresenceUpdate(presenceData);
+          } catch (error) {
+            console.error("Error parsing presence message:", error);
+          }
         }
-      }
-    );
+      );
 
-    this.subscriptions.set("personal", personalSubscription);
-    this.subscriptions.set("typing", typingSubscription);
-    this.subscriptions.set("presence", presenceSubscription);
+      this.subscriptions.set("personal", personalSubscription);
+      this.subscriptions.set("typing", typingSubscription);
+      this.subscriptions.set("presence", presenceSubscription);
+    } catch (error) {
+      console.error("Error setting up subscriptions:", error);
+      setTimeout(() => {
+        this.setupSubscriptions(
+          onMessageReceived,
+          onTypingUpdate,
+          onPresenceUpdate
+        );
+      }, 500);
+    }
   }
 
   subscribeToChat(chatId, onChatMessage) {
@@ -118,7 +137,13 @@ class WebSocketService {
       return null;
     }
 
+    if (this.currentChatId && this.currentChatId !== chatId) {
+      this.unsubscribeFromChat(this.currentChatId);
+    }
+
+    this.currentChatId = chatId;
     const destination = `/topic/chat/${chatId}`;
+
     const subscription = this.client.subscribe(destination, (message) => {
       try {
         const messageData = JSON.parse(message.body);
@@ -137,6 +162,9 @@ class WebSocketService {
     if (subscription) {
       subscription.unsubscribe();
       this.subscriptions.delete(`chat-${chatId}`);
+    }
+    if (this.currentChatId === chatId) {
+      this.currentChatId = null;
     }
   }
 
@@ -169,10 +197,8 @@ class WebSocketService {
   }
 
   sendTypingIndicator(chatId, isTyping) {
-    return this.sendMessage("/app/chat.typing", {
-      chatId,
-      typing: isTyping,
-    });
+    const endpoint = isTyping ? "/app/typing.start" : "/app/typing.stop";
+    return this.sendMessage(endpoint, { chatId });
   }
 
   markMessageAsRead(messageId) {
@@ -209,6 +235,7 @@ class WebSocketService {
         subscription.unsubscribe();
       });
       this.subscriptions.clear();
+      this.currentChatId = null;
 
       this.client.deactivate();
       this.connected = false;

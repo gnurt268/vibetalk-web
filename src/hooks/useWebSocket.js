@@ -9,30 +9,44 @@ import {
 
 const useWebSocket = () => {
   const dispatch = useDispatch();
-  const { auth } = useSelector((store) => store);
+  const { auth, chat } = useSelector((store) => store);
   const connectedRef = useRef(false);
   const currentChatSubscriptionRef = useRef(null);
 
   const handleMessageReceived = useCallback(
     (messageData) => {
+      const transformedMessage = {
+        id: messageData.id,
+        content: messageData.content,
+        messageType: messageData.messageType || "TEXT",
+        createdAt: messageData.timestamp || new Date().toISOString(),
+        sender: {
+          id: messageData.senderId,
+          username: messageData.senderUsername,
+          fullName: messageData.senderUsername,
+          urlAvatar: messageData.senderAvatar,
+        },
+        chat: {
+          id: messageData.chatId,
+        },
+      };
+
       dispatch({
         type: NEW_MESSAGE_RECEIVED,
-        payload: messageData,
+        payload: transformedMessage,
       });
-      if (messageData.sender.id !== auth.user?.id) {
-      }
     },
-    [dispatch, auth.user?.id]
+    [dispatch]
   );
 
   const handleTypingUpdate = useCallback(
     (typingData) => {
-      if (typingData.typing) {
+      if (typingData.status === "TYPING") {
         dispatch({
           type: ADD_TYPING_USER,
           payload: {
             chatId: typingData.chatId,
-            user: typingData.user,
+            user: { id: typingData.userId, fullName: typingData.username },
           },
         });
       } else {
@@ -40,7 +54,7 @@ const useWebSocket = () => {
           type: REMOVE_TYPING_USER,
           payload: {
             chatId: typingData.chatId,
-            userId: typingData.user.id,
+            userId: typingData.userId,
           },
         });
       }
@@ -48,7 +62,9 @@ const useWebSocket = () => {
     [dispatch]
   );
 
-  const handlePresenceUpdate = useCallback((presenceData) => {}, []);
+  const handlePresenceUpdate = useCallback((presenceData) => {
+    console.log("Presence update:", presenceData);
+  }, []);
 
   const connect = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -83,35 +99,24 @@ const useWebSocket = () => {
     }
   }, []);
 
-  const subscribeToChat = useCallback(
-    (chatId) => {
-      if (!webSocketService.isConnected()) {
-        console.warn("WebSocket not connected, cannot subscribe to chat");
-        return;
-      }
+  useEffect(() => {
+    if (connectedRef.current && chat.activeChat?.id) {
+      const chatId = chat.activeChat.id;
 
-      if (currentChatSubscriptionRef.current) {
-        const previousChatId = currentChatSubscriptionRef.current;
-        webSocketService.unsubscribeFromChat(previousChatId);
-      }
-
-      const subscription = webSocketService.subscribeToChat(
-        chatId,
-        handleMessageReceived
-      );
-      if (subscription) {
-        currentChatSubscriptionRef.current = chatId;
-      }
-    },
-    [handleMessageReceived]
-  );
-
-  const unsubscribeFromCurrentChat = useCallback(() => {
-    if (currentChatSubscriptionRef.current) {
+      webSocketService.subscribeToChat(chatId, handleMessageReceived);
+      currentChatSubscriptionRef.current = chatId;
+    } else if (currentChatSubscriptionRef.current) {
       webSocketService.unsubscribeFromChat(currentChatSubscriptionRef.current);
       currentChatSubscriptionRef.current = null;
+    } else {
+      console.log(
+        "Cannot subscribe - connectedRef:",
+        connectedRef.current,
+        "activeChat:",
+        chat.activeChat?.id
+      );
     }
-  }, []);
+  }, [chat.activeChat?.id, connectedRef.current, handleMessageReceived]);
 
   const sendMessage = useCallback((chatId, content, messageType = "TEXT") => {
     if (!webSocketService.isConnected()) {
@@ -158,8 +163,6 @@ const useWebSocket = () => {
     isConnected: connectedRef.current,
     connect,
     disconnect,
-    subscribeToChat,
-    unsubscribeFromCurrentChat,
     sendMessage,
     sendTypingIndicator,
     markMessageAsRead,

@@ -79,8 +79,6 @@ const HomePage = () => {
 
   const {
     isConnected: wsConnected,
-    subscribeToChat,
-    unsubscribeFromCurrentChat,
     sendMessage: sendWebSocketMessage,
     sendTypingIndicator,
     markMessageAsRead,
@@ -110,8 +108,6 @@ const HomePage = () => {
 
   useEffect(() => {
     if (currentChat?.id && wsConnected) {
-      subscribeToChat(currentChat.id);
-
       const unreadMessages = messages.filter(
         (msg) =>
           msg.sender.id !== currentUser?.id &&
@@ -124,17 +120,9 @@ const HomePage = () => {
         markMessageAsRead(msg.id);
       });
     }
-
-    return () => {
-      if (currentChat?.id) {
-        unsubscribeFromCurrentChat();
-      }
-    };
   }, [
     currentChat?.id,
     wsConnected,
-    subscribeToChat,
-    unsubscribeFromCurrentChat,
     messages,
     currentUser?.id,
     markMessageAsRead,
