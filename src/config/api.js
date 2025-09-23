@@ -16,10 +16,14 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    config.headers["ngrok-skip-browser-warning"] = "true";
+    config.headers["ngrok-skip-browser-warning"] = "any";
+    config.headers["Accept"] = "application/json";
+    
     return config;
   },
   (error) => {
-    console.error("Request interceptor error:", error);
     return Promise.reject(error);
   }
 );
