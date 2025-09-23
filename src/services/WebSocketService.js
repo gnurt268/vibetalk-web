@@ -2,6 +2,11 @@ import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 class WebSocketService {
+  getWebSocketUrl(token) {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    const wsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+    return `${wsUrl}/ws?token=${token}`;
+  }
   constructor() {
     this.client = null;
     this.connected = false;
@@ -17,7 +22,7 @@ class WebSocketService {
       try {
         this.client = new Client({
           webSocketFactory: () =>
-            new SockJS(`http://localhost:8080/ws?token=${token}`),
+            new SockJS(this.getWebSocketUrl(token)),
 
           connectHeaders: {
             Authorization: `Bearer ${token}`,
