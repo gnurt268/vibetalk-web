@@ -281,11 +281,11 @@ const Profile = ({ onBack }) => {
                   ? "opacity-50 cursor-not-allowed"
                   : "group-hover:shadow-xl group-hover:scale-105"
               }`}
-              src={avatarPreview || "/default-avatar.png"}
+              src={avatarPreview || "/avatar-default.svg"}
               alt="Profile"
               onClick={handleAvatarClick}
               onError={(e) => {
-                e.target.src = "/default-avatar.png";
+                e.target.src = "avatar-default.svg";
               }}
             />
 
