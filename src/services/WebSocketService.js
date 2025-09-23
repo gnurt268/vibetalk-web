@@ -3,10 +3,15 @@ import SockJS from "sockjs-client";
 
 class WebSocketService {
   getWebSocketUrl(token) {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-    const wsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-    return `${wsUrl}/ws?token=${token}`;
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+  
+  if (apiUrl.includes('ngrok')) {
+    return `${apiUrl}/ws?token=${token}`;
   }
+  
+  const wsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+  return `${wsUrl}/ws?token=${token}`;
+}
   constructor() {
     this.client = null;
     this.connected = false;
@@ -18,65 +23,78 @@ class WebSocketService {
   }
 
   connect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate) {
-    return new Promise((resolve, reject) => {
-      try {
-        this.client = new Client({
-          webSocketFactory: () =>
-            new SockJS(this.getWebSocketUrl(token)),
+  return new Promise((resolve, reject) => {
+    try {
+      const wsUrl = this.getWebSocketUrl(token);
+      console.log('Connecting to WebSocket:', wsUrl);
 
-          connectHeaders: {
-            Authorization: `Bearer ${token}`,
-          },
+      this.client = new Client({
+        webSocketFactory: () => {
+          const sockJSOptions = {};
+          if (wsUrl.includes('ngrok')) {
+            sockJSOptions.headers = {
+              "ngrok-skip-browser-warning": "true"
+            };
+          }
+          return new SockJS(wsUrl, null, sockJSOptions);
+        },
 
-          reconnectDelay: this.reconnectDelay,
-          heartbeatIncoming: 4000,
-          heartbeatOutgoing: 4000,
+        connectHeaders: {
+          Authorization: `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "true",
+        },
 
-          onConnect: (frame) => {
-            this.connected = true;
-            this.reconnectAttempts = 0;
+        reconnectDelay: this.reconnectDelay,
+        heartbeatIncoming: 4000,
+        heartbeatOutgoing: 4000,
 
-            setTimeout(() => {
-              this.setupSubscriptions(
-                onMessageReceived,
-                onTypingUpdate,
-                onPresenceUpdate
-              );
-            }, 100);
+        onConnect: (frame) => {
+          this.connected = true;
+          this.reconnectAttempts = 0;
+          console.log('WebSocket connected successfully');
 
-            resolve(frame);
-          },
-
-          onStompError: (frame) => {
-            console.error("STOMP Error:", frame);
-            this.connected = false;
-            reject(new Error(frame.headers["message"]));
-          },
-
-          onWebSocketClose: (event) => {
-            this.connected = false;
-            this.handleReconnect(
-              token,
+          setTimeout(() => {
+            this.setupSubscriptions(
               onMessageReceived,
               onTypingUpdate,
               onPresenceUpdate
             );
-          },
+          }, 100);
 
-          onWebSocketError: (error) => {
-            console.error("WebSocket Error:", error);
-            this.connected = false;
-            reject(error);
-          },
-        });
+          resolve(frame);
+        },
 
-        this.client.activate();
-      } catch (error) {
-        console.error("WebSocket Connection Error:", error);
-        reject(error);
-      }
-    });
-  }
+        onStompError: (frame) => {
+          console.error("STOMP Error:", frame);
+          this.connected = false;
+          reject(new Error(frame.headers["message"]));
+        },
+
+        onWebSocketClose: (event) => {
+          console.log('WebSocket connection closed');
+          this.connected = false;
+          this.handleReconnect(
+            token,
+            onMessageReceived,
+            onTypingUpdate,
+            onPresenceUpdate
+          );
+        },
+
+        onWebSocketError: (error) => {
+          console.error("WebSocket Error:", error);
+          this.connected = false;
+          reject(error);
+        },
+      });
+
+      this.client.activate();
+    } catch (error) {
+      console.error("WebSocket Connection Error:", error);
+      reject(error);
+    }
+  });
+}
 
   setupSubscriptions(onMessageReceived, onTypingUpdate, onPresenceUpdate) {
     if (!this.client || !this.connected) {

@@ -68,6 +68,7 @@ export const fileUploadApi = axios.create({
   baseURL: BASE_API_URL,
   headers: {
     "Content-Type": "multipart/form-data",
+    "ngrok-skip-browser-warning": "true",
   },
   timeout: 60000,
 });
