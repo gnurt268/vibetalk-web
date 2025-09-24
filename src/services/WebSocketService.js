@@ -3,14 +3,19 @@ import SockJS from "sockjs-client";
 
 class WebSocketService {
   getWebSocketUrl(token) {
+  const wsUrl = import.meta.env.VITE_WS_URL;
+  if (wsUrl) {
+    return `${wsUrl}?token=${token}`;
+  }
+  
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
   
-  if (apiUrl.includes('ngrok')) {
+  if (apiUrl.includes('ngrok') || apiUrl.includes('trycloudflare.com')) {
     return `${apiUrl}/ws?token=${token}`;
   }
   
-  const wsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-  return `${wsUrl}/ws?token=${token}`;
+  const convertedWsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+  return `${convertedWsUrl}/ws?token=${token}`;
 }
   constructor() {
     this.client = null;
