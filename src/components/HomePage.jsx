@@ -94,36 +94,47 @@ const HomePage = () => {
     if (currentChat?.id) {
       dispatch(getChatMessages(currentChat.id));
       dispatch(markChatAsRead(currentChat.id));
-      setContent(messageDraft);
     }
-  }, [currentChat, dispatch, messageDraft]);
+  }, [currentChat?.id, dispatch]);
 
   useEffect(() => {
-    setContent(messageDraft);
-  }, [messageDraft]);
+    if (currentChat?.id) {
+      setContent(messageDraft);
+    }
+  }, [currentChat?.id, messageDraft]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, inputHeight]);
 
-  useEffect(() => {
-    if (currentChat?.id && wsConnected) {
-      const unreadMessages = messages.filter(
-        (msg) =>
-          msg.sender.id !== currentUser?.id &&
-          !msg.readStatuses?.some(
-            (status) => status.user.id === currentUser?.id
-          )
-      );
+  const lastReadChatRef = useRef(null);
+  const lastReadLengthRef = useRef(0);
 
-      unreadMessages.forEach((msg) => {
-        markMessageAsRead(msg.id);
-      });
+  useEffect(() => {
+    if (!currentChat?.id || !wsConnected || !messages.length) return;
+
+    const isNewChat = lastReadChatRef.current !== currentChat.id;
+    const hasNewMessages = messages.length > lastReadLengthRef.current;
+
+    if (!isNewChat && !hasNewMessages) return;
+
+    const unreadMessages = messages.filter(
+      (msg) =>
+        msg.sender.id !== currentUser?.id &&
+        !msg.readStatuses?.some((status) => status.user.id === currentUser?.id),
+    );
+
+    if (unreadMessages.length > 0) {
+      const lastUnread = unreadMessages[unreadMessages.length - 1];
+      markMessageAsRead(lastUnread.id);
     }
+
+    lastReadChatRef.current = currentChat.id;
+    lastReadLengthRef.current = messages.length;
   }, [
     currentChat?.id,
     wsConnected,
-    messages,
+    messages.length,
     currentUser?.id,
     markMessageAsRead,
   ]);
@@ -208,7 +219,7 @@ const HomePage = () => {
           success = sendWebSocketMessage(
             currentChat.id,
             content.trim(),
-            "TEXT"
+            "TEXT",
           );
         }
 
@@ -547,7 +558,7 @@ const HomePage = () => {
                       {currentChat.groupChat
                         ? currentChat.chatName || "Group Chat"
                         : currentChat.members?.find(
-                            (member) => member.id !== currentUser?.id
+                            (member) => member.id !== currentUser?.id,
                           )?.fullName || "Chat"}
                     </p>
                     {currentChat.groupChat && (
@@ -620,7 +631,7 @@ const HomePage = () => {
                     e.target.style.height = "auto";
                     const newHeight = Math.min(
                       Math.max(e.target.scrollHeight, 40),
-                      120
+                      120,
                     );
                     e.target.style.height = newHeight + "px";
                     setInputHeight(Math.max(100, newHeight + 60));
@@ -641,8 +652,8 @@ const HomePage = () => {
                     !content.trim() || isSendingMessage
                       ? "text-gray-400"
                       : wsConnected
-                      ? "text-green-600 hover:text-green-700"
-                      : "text-blue-600 hover:text-blue-700"
+                        ? "text-green-600 hover:text-green-700"
+                        : "text-blue-600 hover:text-blue-700"
                   } transition-colors`}
                 />
               </button>

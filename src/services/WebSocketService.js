@@ -5,17 +5,13 @@ class WebSocketService {
   getWebSocketUrl(token) {
   const wsUrl = import.meta.env.VITE_WS_URL;
   if (wsUrl) {
-    return `${wsUrl}?token=${token}`;
+    const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+    return `${httpUrl}?token=${token}`;
   }
   
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
   
-  if (apiUrl.includes('ngrok') || apiUrl.includes('trycloudflare.com')) {
-    return `${apiUrl}/ws?token=${token}`;
-  }
-  
-  const convertedWsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-  return `${convertedWsUrl}/ws?token=${token}`;
+  return `${apiUrl}/ws?token=${token}`;
 }
   constructor() {
     this.client = null;
@@ -31,8 +27,6 @@ class WebSocketService {
   return new Promise((resolve, reject) => {
     try {
       const wsUrl = this.getWebSocketUrl(token);
-      console.log('Connecting to WebSocket:', wsUrl);
-
       this.client = new Client({
         webSocketFactory: () => {
           const sockJSOptions = {};
@@ -56,7 +50,6 @@ class WebSocketService {
         onConnect: (frame) => {
           this.connected = true;
           this.reconnectAttempts = 0;
-          console.log('WebSocket connected successfully');
 
           setTimeout(() => {
             this.setupSubscriptions(
@@ -76,7 +69,6 @@ class WebSocketService {
         },
 
         onWebSocketClose: (event) => {
-          console.log('WebSocket connection closed');
           this.connected = false;
           this.handleReconnect(
             token,

@@ -13,7 +13,7 @@ const ChatCard = ({ chat, isActive }) => {
       const otherUser = chat.members?.find(
         (member) => member.id !== currentUser?.id
       );
-      return otherUser?.fullName || otherUser?.username || "Unknown User";
+      return otherUser?.fullName || "Unknown User";
     }
   };
   const getChatDisplayImage = () => {

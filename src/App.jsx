@@ -43,7 +43,6 @@ function App() {
           }
         }
       } else if (token && auth?.user) {
-        console.log("User already loaded:", auth.user);
       } else {
         console.error("No token found, user needs to login");
       }

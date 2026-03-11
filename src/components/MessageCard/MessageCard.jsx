@@ -161,7 +161,7 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
       {/* Sender name for group chats (only for received messages) */}
       {!isOwnMessage && message.sender && (
         <div className="text-xs text-gray-600 mb-1 font-medium">
-          {message.sender.fullName || message.sender.username}
+          {message.sender.fullName}
         </div>
       )}
 

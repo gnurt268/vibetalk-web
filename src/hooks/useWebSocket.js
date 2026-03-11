@@ -23,7 +23,7 @@ const useWebSocket = () => {
         sender: {
           id: messageData.senderId,
           username: messageData.senderUsername,
-          fullName: messageData.senderUsername,
+          fullName: messageData.senderFullName,
           urlAvatar: messageData.senderAvatar,
         },
         chat: {
@@ -63,7 +63,6 @@ const useWebSocket = () => {
   );
 
   const handlePresenceUpdate = useCallback((presenceData) => {
-    console.log("Presence update:", presenceData);
   }, []);
 
   const connect = useCallback(async () => {
@@ -109,12 +108,7 @@ const useWebSocket = () => {
       webSocketService.unsubscribeFromChat(currentChatSubscriptionRef.current);
       currentChatSubscriptionRef.current = null;
     } else {
-      console.log(
-        "Cannot subscribe - connectedRef:",
-        connectedRef.current,
-        "activeChat:",
-        chat.activeChat?.id
-      );
+      console.warn("No active chat to subscribe to or already subscribed");
     }
   }, [chat.activeChat?.id, connectedRef.current, handleMessageReceived]);
 
