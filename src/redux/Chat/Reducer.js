@@ -75,6 +75,7 @@ import {
   GET_ALL_UNREAD_COUNTS_ERROR,
   CLEAR_UNREAD_COUNT,
   INCREMENT_UNREAD_COUNT,
+  UPDATE_CHAT_LAST_MESSAGE,
 } from "./ActionType";
 
 const initialState = {
@@ -646,6 +647,15 @@ const chatReducer = (state = initialState, action) => {
           ...state.unreadCounts,
           [action.payload]: (state.unreadCounts[action.payload] || 0) + 1,
         },
+      };
+
+    case UPDATE_CHAT_LAST_MESSAGE:
+      const { chatId: lmChatId, lastMessage: lmData } = action.payload;
+      return {
+        ...state,
+        chats: state.chats.map((c) =>
+          c.id === lmChatId ? { ...c, _lastMessage: lmData } : c
+        ),
       };
 
     default:

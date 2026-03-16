@@ -210,16 +210,33 @@ export const getUserChats = () => async (dispatch) => {
   try {
     dispatch({ type: GET_USER_CHATS });
 
-    const response = await api.get("/api/chats", {
+    const response = await api.get("/api/chats/summaries", {
       headers: getAuthHeaders(),
+    });
+
+    const summaries = response.data;
+    const chats = summaries.map((s) => ({
+      ...s.chat,
+      _lastMessage: s.lastMessage,
+    }));
+    const unreadCounts = {};
+    summaries.forEach((s) => {
+      if (s.unreadCount > 0) {
+        unreadCounts[s.chat.id] = s.unreadCount;
+      }
     });
 
     dispatch({
       type: GET_USER_CHATS_SUCCESS,
-      payload: response.data,
+      payload: chats,
     });
 
-    return response.data;
+    dispatch({
+      type: GET_ALL_UNREAD_COUNTS_SUCCESS,
+      payload: unreadCounts,
+    });
+
+    return chats;
   } catch (error) {
     dispatch({
       type: GET_USER_CHATS_ERROR,

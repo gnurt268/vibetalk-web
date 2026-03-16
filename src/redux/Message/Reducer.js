@@ -473,16 +473,18 @@ const messageReducer = (state = initialState, action) => {
         return state;
       }
 
+      const existingMessages = state.messagesByChat[receivedChatId]?.messages || [];
+      if (receivedMessage.id && existingMessages.some((m) => m.id === receivedMessage.id)) {
+        return state;
+      }
+
       const newState = {
         ...state,
         messagesByChat: {
           ...state.messagesByChat,
           [receivedChatId]: {
             ...state.messagesByChat[receivedChatId],
-            messages: [
-              ...(state.messagesByChat[receivedChatId]?.messages || []),
-              receivedMessage,
-            ],
+            messages: [...existingMessages, receivedMessage],
           },
         },
       };

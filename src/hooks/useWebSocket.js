@@ -6,7 +6,7 @@ import {
   ADD_TYPING_USER,
   REMOVE_TYPING_USER,
 } from "../redux/Message/ActionType";
-import { INCREMENT_UNREAD_COUNT } from "../redux/Chat/ActionType";
+import { INCREMENT_UNREAD_COUNT, UPDATE_CHAT_LAST_MESSAGE } from "../redux/Chat/ActionType";
 
 const useWebSocket = () => {
   const dispatch = useDispatch();
@@ -15,8 +15,8 @@ const useWebSocket = () => {
   const currentChatSubscriptionRef = useRef(null);
   const activeChatIdRef = useRef(null);
   const currentUserIdRef = useRef(null);
+  const lastProcessedMsgIdRef = useRef(null);
 
-  // Luôn cập nhật ref khi state thay đổi — tránh stale closure
   useEffect(() => {
     activeChatIdRef.current = chat?.activeChat?.id || null;
   }, [chat?.activeChat?.id]);
@@ -27,6 +27,11 @@ const useWebSocket = () => {
 
   const handleMessageReceived = useCallback(
     (messageData) => {
+      if (messageData.id === lastProcessedMsgIdRef.current) {
+        return;
+      }
+      lastProcessedMsgIdRef.current = messageData.id;
+
       const transformedMessage = {
         id: messageData.id,
         content: messageData.content,
@@ -48,7 +53,21 @@ const useWebSocket = () => {
         payload: transformedMessage,
       });
 
-      // Dùng ref để luôn có giá trị mới nhất
+      dispatch({
+        type: UPDATE_CHAT_LAST_MESSAGE,
+        payload: {
+          chatId: messageData.chatId,
+          lastMessage: {
+            id: messageData.id,
+            content: messageData.content,
+            messageType: messageData.messageType || "TEXT",
+            createdAt: messageData.timestamp || new Date().toISOString(),
+            senderId: messageData.senderId,
+            senderName: messageData.senderFullName || messageData.senderUsername,
+          },
+        },
+      });
+
       if (
         messageData.chatId !== activeChatIdRef.current &&
         messageData.senderId !== currentUserIdRef.current
@@ -98,7 +117,8 @@ const useWebSocket = () => {
         token,
         handleMessageReceived,
         handleTypingUpdate,
-        handlePresenceUpdate
+        handlePresenceUpdate,
+        auth.user.id
       );
       connectedRef.current = true;
     } catch (error) {
@@ -120,16 +140,6 @@ const useWebSocket = () => {
     }
   }, []);
 
-  useEffect(() => {
-    if (connectedRef.current && chat.activeChat?.id) {
-      const chatId = chat.activeChat.id;
-      webSocketService.subscribeToChat(chatId, handleMessageReceived);
-      currentChatSubscriptionRef.current = chatId;
-    } else if (currentChatSubscriptionRef.current) {
-      webSocketService.unsubscribeFromChat(currentChatSubscriptionRef.current);
-      currentChatSubscriptionRef.current = null;
-    }
-  }, [chat.activeChat?.id, connectedRef.current, handleMessageReceived]);
 
   const sendMessage = useCallback((chatId, content, messageType = "TEXT") => {
     if (!webSocketService.isConnected()) {

@@ -40,20 +40,30 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
   };
 
   const getLastMessage = () => {
-    // Ưu tiên lấy từ Redux store (có cập nhật realtime)
-    const messages = chatMessages.length > 0 ? chatMessages : chat.messages;
-
-    if (!messages || messages.length === 0) {
-      return {
-        content: "No messages yet",
-        timestamp: "",
-        isFromCurrentUser: false,
-      };
+    // Ưu tiên 1: messages từ Redux store (đã load + cập nhật realtime)
+    if (chatMessages.length > 0) {
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      return formatMessage(lastMsg.content, lastMsg.createdAt, lastMsg.sender?.id === currentUser?.id);
     }
 
-    const lastMessage = messages[messages.length - 1];
-    const isFromCurrentUser = lastMessage.sender?.id === currentUser?.id;
-    const messageDate = new Date(lastMessage.createdAt);
+    // Ưu tiên 2: _lastMessage từ API /summaries (khi chưa click vào chat)
+    if (chat._lastMessage) {
+      return formatMessage(
+        chat._lastMessage.content,
+        chat._lastMessage.createdAt,
+        chat._lastMessage.senderId === currentUser?.id
+      );
+    }
+
+    return {
+      content: "No messages yet",
+      timestamp: "",
+      isFromCurrentUser: false,
+    };
+  };
+
+  const formatMessage = (content, createdAt, isFromCurrentUser) => {
+    const messageDate = new Date(createdAt);
     const now = new Date();
     const diffTime = now - messageDate;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -76,19 +86,15 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
       });
     }
 
-    let content = lastMessage.content || "";
-    if (content.length > 30) {
-      content = content.substring(0, 30) + "...";
+    let displayContent = content || "";
+    if (displayContent.length > 30) {
+      displayContent = displayContent.substring(0, 30) + "...";
     }
     if (isFromCurrentUser && chat.groupChat) {
-      content = "You: " + content;
+      displayContent = "You: " + displayContent;
     }
 
-    return {
-      content,
-      timestamp,
-      isFromCurrentUser,
-    };
+    return { content: displayContent, timestamp, isFromCurrentUser };
   };
 
   const lastMessage = getLastMessage();

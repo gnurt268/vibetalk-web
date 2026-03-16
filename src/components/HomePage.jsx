@@ -22,7 +22,7 @@ import CreateGroup from "./GroupChat/CreateGroup";
 import StartNewChat from "./Chat/StartNewChat";
 import { logout } from "../redux/Auth/Action";
 import { useDispatch, useSelector } from "react-redux";
-import { getUserChats, searchChats, setActiveChat, getAllUnreadCounts, clearUnreadCount } from "../redux/Chat/Action";
+import { getUserChats, searchChats, setActiveChat, clearUnreadCount } from "../redux/Chat/Action";
 import useWebSocket from "../hooks/useWebSocket";
 
 import {
@@ -95,7 +95,6 @@ const HomePage = () => {
   useEffect(() => {
     if (currentUser) {
       dispatch(getUserChats());
-      dispatch(getAllUnreadCounts());
     }
   }, [dispatch, currentUser]);
 

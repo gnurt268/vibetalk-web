@@ -23,10 +23,11 @@ class WebSocketService {
     this.currentChatId = null;
   }
 
-  connect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate) {
+  connect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate, userId) {
   return new Promise((resolve, reject) => {
     try {
       const wsUrl = this.getWebSocketUrl(token);
+      this.userId = userId;
       this.client = new Client({
         webSocketFactory: () => {
           const sockJSOptions = {};
@@ -101,7 +102,7 @@ class WebSocketService {
 
     try {
       const personalSubscription = this.client.subscribe(
-        "/user/queue/messages",
+        `/topic/user/${this.userId}/messages`,
         (message) => {
           try {
             const messageData = JSON.parse(message.body);
@@ -113,7 +114,7 @@ class WebSocketService {
       );
 
       const typingSubscription = this.client.subscribe(
-        "/user/queue/typing",
+        `/topic/user/${this.userId}/typing`,
         (message) => {
           try {
             const typingData = JSON.parse(message.body);
