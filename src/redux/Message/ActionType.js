@@ -80,3 +80,8 @@ export const REMOVE_TYPING_USER = "REMOVE_TYPING_USER";
 // Message Draft Actions (for saving unsent messages)
 export const SET_MESSAGE_DRAFT = "SET_MESSAGE_DRAFT";
 export const CLEAR_MESSAGE_DRAFT = "CLEAR_MESSAGE_DRAFT";
+
+// File Upload Actions
+export const UPLOAD_FILE = "UPLOAD_FILE";
+export const UPLOAD_FILE_SUCCESS = "UPLOAD_FILE_SUCCESS";
+export const UPLOAD_FILE_ERROR = "UPLOAD_FILE_ERROR";

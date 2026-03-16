@@ -11,6 +11,8 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
   const [showOptions, setShowOptions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message?.content || "");
+  const [showLightbox, setShowLightbox] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const { auth } = useSelector((store) => store);
   const { message: messageState } = useSelector((store) => store);
@@ -21,6 +23,31 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
   const isEditingMessage = messageState?.editingMessage;
 
   if (!message) return null;
+
+  // Parse content format: url|fileName|fileSize|caption
+  const parseFileContent = (content) => {
+    if (!content) return { url: "", fileName: "", fileSize: 0, caption: "" };
+    const parts = content.split("|");
+    return {
+      url: parts[0] || "",
+      fileName: parts[1] || "file",
+      fileSize: parseInt(parts[2]) || 0,
+      caption: parts[3] || "",
+    };
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return "";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
+  const isImageMessage = message.messageType === "IMAGE";
+  const isFileMessage = message.messageType === "FILE";
+  const isMediaMessage = isImageMessage || isFileMessage;
+  const fileData = isMediaMessage ? parseFileContent(message.content) : null;
+
   const formatTimestamp = (timestamp) => {
     const messageDate = new Date(timestamp);
     const now = new Date();
@@ -81,7 +108,7 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
   const handleDeleteForMe = async () => {
     if (
       window.confirm(
-        "Are you sure you want to delete this message for yourself?"
+        "Are you sure you want to delete this message for yourself?",
       )
     ) {
       try {
@@ -135,7 +162,7 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
 
                 const choice = prompt(
                   "Choose option:\n" +
-                    options.map((opt, i) => `${i + 1}. ${opt}`).join("\n")
+                    options.map((opt, i) => `${i + 1}. ${opt}`).join("\n"),
                 );
 
                 if (choice === "1" && isOwnMessage) {
@@ -194,6 +221,99 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
               {isEditingMessage ? "Saving..." : "Save"}
             </button>
           </div>
+        </div>
+      ) : isImageMessage && fileData ? (
+        <div>
+          {/* Image message */}
+          <div className="relative">
+            {!imageLoaded && (
+              <div className="w-48 h-32 bg-gray-200 rounded-md animate-pulse flex items-center justify-center">
+                <span className="text-gray-400 text-sm">Loading...</span>
+              </div>
+            )}
+            <img
+              src={fileData.url}
+              alt={fileData.fileName}
+              className={`max-w-[280px] max-h-[300px] rounded-md cursor-pointer object-cover hover:opacity-90 transition-opacity ${
+                imageLoaded ? "" : "hidden"
+              }`}
+              onClick={() => setShowLightbox(true)}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageLoaded(true)}
+            />
+          </div>
+          {fileData.caption && (
+            <p className="text-sm mt-1 break-words whitespace-pre-wrap">
+              {fileData.caption}
+            </p>
+          )}
+
+          {/* Lightbox */}
+          {showLightbox && (
+            <div
+              className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+              onClick={() => setShowLightbox(false)}
+            >
+              <div className="relative max-w-[90vw] max-h-[90vh]">
+                <img
+                  src={fileData.url}
+                  alt={fileData.fileName}
+                  className="max-w-full max-h-[90vh] object-contain rounded"
+                />
+                <div className="absolute top-2 right-2 flex space-x-2">
+                  <a
+                    href={fileData.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={fileData.fileName}
+                    className="bg-white/20 hover:bg-white/40 text-white rounded-full p-2 text-sm backdrop-blur-sm"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Download"
+                  >
+                    ⬇
+                  </a>
+                  <button
+                    className="bg-white/20 hover:bg-white/40 text-white rounded-full p-2 text-sm backdrop-blur-sm"
+                    onClick={() => setShowLightbox(false)}
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : isFileMessage && fileData ? (
+        <div>
+          {/* File message */}
+          <a
+            href={fileData.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={fileData.fileName}
+            className="flex items-center space-x-3 p-2 bg-white/50 rounded-lg hover:bg-white/80 transition-colors border border-gray-200"
+          >
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
+              📄
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-blue-600 truncate">
+                {fileData.fileName}
+              </p>
+              {fileData.fileSize > 0 && (
+                <p className="text-xs text-gray-500">
+                  {formatFileSize(fileData.fileSize)}
+                </p>
+              )}
+            </div>
+            <span className="text-gray-400 text-lg flex-shrink-0">⬇</span>
+          </a>
+          {fileData.caption && (
+            <p className="text-sm mt-1 break-words whitespace-pre-wrap">
+              {fileData.caption}
+            </p>
+          )}
         </div>
       ) : (
         <div>

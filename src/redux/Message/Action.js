@@ -1,4 +1,4 @@
-import api from "../../config/api";
+import api, { fileUploadApi } from "../../config/api";
 import {
   SEND_MESSAGE,
   SEND_MESSAGE_SUCCESS,
@@ -51,6 +51,9 @@ import {
   SET_TYPING_USERS,
   ADD_TYPING_USER,
   REMOVE_TYPING_USER,
+  UPLOAD_FILE,
+  UPLOAD_FILE_SUCCESS,
+  UPLOAD_FILE_ERROR,
 } from "./ActionType";
 
 export {
@@ -84,7 +87,7 @@ export const sendMessage = (messageData) => async (dispatch) => {
       },
       {
         headers: getAuthHeaders(),
-      }
+      },
     );
 
     dispatch({
@@ -302,7 +305,7 @@ export const forwardMessage = (messageId, targetChatId) => async (dispatch) => {
       {},
       {
         headers: getAuthHeaders(),
-      }
+      },
     );
 
     dispatch({
@@ -360,7 +363,7 @@ export const markChatAsRead = (chatId) => async (dispatch) => {
       {},
       {
         headers: getAuthHeaders(),
-      }
+      },
     );
 
     dispatch({
@@ -502,6 +505,55 @@ export const loadChatMessagesWithStatus =
       };
     } catch (error) {
       console.error("Error loading chat messages with status:", error);
+      throw error;
+    }
+  };
+
+/**
+ * Upload file/ảnh và gửi message.
+ * @param {File} file - File object từ input
+ * @param {number} chatId
+ * @param {string} [caption] - Caption tùy chọn
+ * @param {function} [onProgress] - Callback upload progress (0-100)
+ */
+export const uploadAndSendFile =
+  (file, chatId, caption, onProgress) => async (dispatch) => {
+    try {
+      dispatch({ type: UPLOAD_FILE, payload: { chatId, fileName: file.name } });
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("chatId", chatId);
+      if (caption) {
+        formData.append("caption", caption);
+      }
+
+      const response = await fileUploadApi.post(
+        "/api/messages/upload",
+        formData,
+        {
+          onUploadProgress: (progressEvent) => {
+            if (onProgress && progressEvent.total) {
+              const percent = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total,
+              );
+              onProgress(percent);
+            }
+          },
+        },
+      );
+
+      dispatch({
+        type: UPLOAD_FILE_SUCCESS,
+        payload: response.data,
+      });
+
+      return response.data;
+    } catch (error) {
+      dispatch({
+        type: UPLOAD_FILE_ERROR,
+        payload: error.response?.data?.message || error.message,
+      });
       throw error;
     }
   };

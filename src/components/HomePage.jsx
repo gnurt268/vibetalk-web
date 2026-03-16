@@ -12,7 +12,7 @@ import { BsEmojiSmile, BsFilter, BsThreeDotsVertical } from "react-icons/bs";
 import ChatCard from "./ChatCard/ChatCard";
 import MessageCard from "./MessageCard/MessageCard";
 import { ImAttachment } from "react-icons/im";
-import { IoSend } from "react-icons/io5";
+import { IoSend, IoClose } from "react-icons/io5";
 import "./HomePage.css";
 import { useNavigate } from "react-router-dom";
 import Profile from "./Profile/Profile";
@@ -22,7 +22,12 @@ import CreateGroup from "./GroupChat/CreateGroup";
 import StartNewChat from "./Chat/StartNewChat";
 import { logout } from "../redux/Auth/Action";
 import { useDispatch, useSelector } from "react-redux";
-import { getUserChats, searchChats, setActiveChat, clearUnreadCount } from "../redux/Chat/Action";
+import {
+  getUserChats,
+  searchChats,
+  setActiveChat,
+  clearUnreadCount,
+} from "../redux/Chat/Action";
 import useWebSocket from "../hooks/useWebSocket";
 
 import {
@@ -30,6 +35,7 @@ import {
   sendMessage,
   setMessageDraft,
   markChatAsRead,
+  uploadAndSendFile,
 } from "../redux/Message/Action";
 
 import {
@@ -48,6 +54,9 @@ const HomePage = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [typingTimer, setTypingTimer] = useState(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -55,6 +64,7 @@ const HomePage = () => {
   const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
   const inputContainerRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const store = useSelector((store) => store);
   const { auth } = store;
@@ -76,11 +86,12 @@ const HomePage = () => {
   const isLoadingChats = chat?.loading || false;
   const isLoadingMessages = message?.messageLoading;
   const isSendingMessage = message?.sendingMessage;
+  const isUploadingFile = message?.uploadingFile;
   const hasMore = currentChat?.id
-    ? message?.messagesByChat?.[currentChat.id]?.hasMore ?? true
+    ? (message?.messagesByChat?.[currentChat.id]?.hasMore ?? true)
     : false;
   const currentPage = currentChat?.id
-    ? message?.messagesByChat?.[currentChat.id]?.page ?? 0
+    ? (message?.messagesByChat?.[currentChat.id]?.page ?? 0)
     : 0;
 
   const open = Boolean(anchorEl);
@@ -115,7 +126,6 @@ const HomePage = () => {
   const prevMessagesLengthRef = useRef(0);
   const shouldScrollRef = useRef(true);
 
-  // Scroll xuống cuối khi mở chat mới
   useEffect(() => {
     if (currentChat?.id) {
       shouldScrollRef.current = true;
@@ -129,17 +139,18 @@ const HomePage = () => {
     const newLength = messages.length;
 
     if (shouldScrollRef.current) {
-      // Mở chat lần đầu → scroll xuống cuối sau khi render
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
         shouldScrollRef.current = false;
       }, 100);
     } else if (newLength > prevLength && prevLength > 0) {
-      // Có tin mới (append ở cuối) → kiểm tra nếu đang ở gần cuối thì scroll
       const container = messagesContainerRef.current;
       if (container) {
         const isNearBottom =
-          container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+          container.scrollHeight -
+            container.scrollTop -
+            container.clientHeight <
+          150;
         if (isNearBottom) {
           setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -147,7 +158,6 @@ const HomePage = () => {
         }
       }
     }
-    // Load tin cũ (prepend) → không scroll, handleLoadMore đã giữ vị trí
 
     prevMessagesLengthRef.current = newLength;
   }, [messages.length]);
@@ -221,7 +231,6 @@ const HomePage = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    // Lưu scroll position trước khi load
     const prevScrollHeight = container.scrollHeight;
 
     setIsLoadingMore(true);
@@ -231,7 +240,6 @@ const HomePage = () => {
       setIsLoadingMore(false);
     }
 
-    // Giữ vị trí scroll sau khi prepend tin cũ
     requestAnimationFrame(() => {
       const newScrollHeight = container.scrollHeight;
       container.scrollTop = newScrollHeight - prevScrollHeight;
@@ -241,12 +249,11 @@ const HomePage = () => {
   const handleMessagesScroll = useCallback(
     (e) => {
       const { scrollTop } = e.target;
-      // Khi scroll lên gần đầu (< 50px) → load thêm tin cũ
       if (scrollTop < 50 && hasMore && !isLoadingMore) {
         handleLoadMore();
       }
     },
-    [hasMore, isLoadingMore, handleLoadMore]
+    [hasMore, isLoadingMore, handleLoadMore],
   );
 
   const handleClick = (event) => {
@@ -337,6 +344,70 @@ const HomePage = () => {
         }
       }
     }
+  };
+
+  const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isImage = IMAGE_TYPES.includes(file.type);
+    const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
+
+    if (file.size > maxSize) {
+      const maxMB = maxSize / (1024 * 1024);
+      alert(`File size exceeds ${maxMB}MB limit`);
+      e.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+
+    if (isImage) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setFilePreview(ev.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(null);
+    }
+
+    e.target.value = "";
+  };
+
+  const handleFileRemove = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    setUploadProgress(0);
+  };
+
+  const handleSendFile = async () => {
+    if (!selectedFile || !currentChat?.id || isUploadingFile) return;
+
+    try {
+      const caption = content.trim() || undefined;
+      await dispatch(
+        uploadAndSendFile(selectedFile, currentChat.id, caption, (progress) => {
+          setUploadProgress(progress);
+        }),
+      );
+
+      handleFileRemove();
+      setContent("");
+      dispatch(setMessageDraft(currentChat.id, ""));
+      setTimeout(() => scrollToBottom(), 100);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      alert("Failed to upload file. Please try again.");
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
   const typingUsers = useMemo(() => {
@@ -668,12 +739,16 @@ const HomePage = () => {
                 {/* Loading more indicator */}
                 {isLoadingMore && (
                   <div className="flex justify-center items-center py-3">
-                    <div className="text-sm text-gray-500">Loading older messages...</div>
+                    <div className="text-sm text-gray-500">
+                      Loading older messages...
+                    </div>
                   </div>
                 )}
                 {!hasMore && messages.length > 0 && (
                   <div className="flex justify-center items-center py-3">
-                    <div className="text-xs text-gray-400">Beginning of conversation</div>
+                    <div className="text-xs text-gray-400">
+                      Beginning of conversation
+                    </div>
                   </div>
                 )}
                 {isLoadingMessages ? (
@@ -705,51 +780,136 @@ const HomePage = () => {
             {/* Message input */}
             <div
               ref={inputContainerRef}
-              className="absolute bottom-0 left-0 right-0 bg-[#f0f2f5] px-3 py-2 flex items-end space-x-3"
+              className="absolute bottom-0 left-0 right-0 bg-[#f0f2f5] px-3 py-2 flex flex-col"
               style={{ minHeight: `${inputHeight}px` }}
             >
-              <BsEmojiSmile className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700" />
-              <ImAttachment className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700" />
+              {/* File preview */}
+              {selectedFile && (
+                <div className="mb-2 p-2 bg-white rounded-lg border border-gray-200 flex items-center space-x-3">
+                  {filePreview ? (
+                    <img
+                      src={filePreview}
+                      alt="preview"
+                      className="w-16 h-16 object-cover rounded-md"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center text-2xl">
+                      📎
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 truncate">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFileSize(selectedFile.size)}
+                    </p>
+                    {isUploadingFile && (
+                      <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
+                        <div
+                          className="bg-green-500 h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleFileRemove}
+                    className="p-1 hover:bg-gray-100 rounded-full"
+                    disabled={isUploadingFile}
+                  >
+                    <IoClose className="text-xl text-gray-500" />
+                  </button>
+                </div>
+              )}
 
-              <div className="flex-1 relative">
-                <textarea
-                  ref={textareaRef}
-                  className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
-                  placeholder="Type a message..."
-                  value={content}
-                  onChange={(e) => handleContentChange(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  style={{ minHeight: "40px", maxHeight: "120px" }}
-                  onInput={(e) => {
-                    e.target.style.height = "auto";
-                    const newHeight = Math.min(
-                      Math.max(e.target.scrollHeight, 40),
-                      120,
-                    );
-                    e.target.style.height = newHeight + "px";
-                    setInputHeight(Math.max(100, newHeight + 60));
-                  }}
-                  disabled={isSendingMessage}
+              {/* Input row */}
+              <div className="flex items-end space-x-3">
+                <BsEmojiSmile className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700" />
+
+                {/* Hidden file input */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"
                 />
-              </div>
+                <ImAttachment
+                  className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700"
+                  onClick={() => fileInputRef.current?.click()}
+                />
 
-              {/* ✅ Fixed send button - removed wsConnected dependency */}
-              <button
-                onClick={handleCreateNewMessage}
-                disabled={!content.trim() || isSendingMessage}
-                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                title={wsConnected ? "Send via WebSocket" : "Send via HTTP"}
-              >
-                <IoSend
-                  className={`text-2xl ${
-                    !content.trim() || isSendingMessage
-                      ? "text-gray-400"
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={textareaRef}
+                    className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
+                    placeholder={
+                      selectedFile ? "Add a caption..." : "Type a message..."
+                    }
+                    value={content}
+                    onChange={(e) => handleContentChange(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (selectedFile) {
+                          handleSendFile();
+                        } else {
+                          handleCreateNewMessage();
+                        }
+                      }
+                    }}
+                    style={{ minHeight: "40px", maxHeight: "120px" }}
+                    onInput={(e) => {
+                      e.target.style.height = "auto";
+                      const newHeight = Math.min(
+                        Math.max(e.target.scrollHeight, 40),
+                        120,
+                      );
+                      e.target.style.height = newHeight + "px";
+                      setInputHeight(Math.max(100, newHeight + 60));
+                    }}
+                    disabled={isSendingMessage || isUploadingFile}
+                  />
+                </div>
+
+                <button
+                  onClick={
+                    selectedFile ? handleSendFile : handleCreateNewMessage
+                  }
+                  disabled={
+                    selectedFile
+                      ? isUploadingFile
+                      : !content.trim() || isSendingMessage
+                  }
+                  className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                  title={
+                    selectedFile
+                      ? isUploadingFile
+                        ? `Uploading... ${uploadProgress}%`
+                        : "Send file"
                       : wsConnected
-                        ? "text-green-600 hover:text-green-700"
-                        : "text-blue-600 hover:text-blue-700"
-                  } transition-colors`}
-                />
-              </button>
+                        ? "Send via WebSocket"
+                        : "Send via HTTP"
+                  }
+                >
+                  {isUploadingFile ? (
+                    <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <IoSend
+                      className={`text-2xl ${
+                        selectedFile
+                          ? "text-green-600 hover:text-green-700"
+                          : !content.trim() || isSendingMessage
+                            ? "text-gray-400"
+                            : wsConnected
+                              ? "text-green-600 hover:text-green-700"
+                              : "text-blue-600 hover:text-blue-700"
+                      } transition-colors`}
+                    />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
