@@ -133,7 +133,7 @@ const messageReducer = (state = initialState, action) => {
             messages:
               page === 0
                 ? messages
-                : [...(existingChatMessages?.messages || []), ...messages],
+                : [...messages, ...(existingChatMessages?.messages || [])],
             hasMore,
             page,
           },

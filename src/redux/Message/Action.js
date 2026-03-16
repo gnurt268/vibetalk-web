@@ -103,7 +103,7 @@ export const sendMessage = (messageData) => async (dispatch) => {
 };
 
 export const getChatMessages =
-  (chatId, page = 0, size = 50) =>
+  (chatId, page = 0, size = 30) =>
   async (dispatch) => {
     if (!chatId || chatId === "undefined") {
       console.error("Invalid chatId:", chatId);
@@ -116,10 +116,8 @@ export const getChatMessages =
         dispatch({ type: SET_MESSAGE_LOADING, payload: true });
       }
 
-      const params = page === 0 && size === 50 ? {} : { page, size };
-
       const response = await api.get(`/api/messages/chat/${chatId}`, {
-        params,
+        params: { page, size },
         headers: getAuthHeaders(),
       });
 

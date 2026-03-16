@@ -47,10 +47,12 @@ const HomePage = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [typingTimer, setTypingTimer] = useState(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
   const inputContainerRef = useRef(null);
 
@@ -74,6 +76,12 @@ const HomePage = () => {
   const isLoadingChats = chat?.loading || false;
   const isLoadingMessages = message?.messageLoading;
   const isSendingMessage = message?.sendingMessage;
+  const hasMore = currentChat?.id
+    ? message?.messagesByChat?.[currentChat.id]?.hasMore ?? true
+    : false;
+  const currentPage = currentChat?.id
+    ? message?.messagesByChat?.[currentChat.id]?.page ?? 0
+    : 0;
 
   const open = Boolean(anchorEl);
 
@@ -103,9 +111,45 @@ const HomePage = () => {
     }
   }, [currentChat?.id, messageDraft]);
 
+  const prevMessagesLengthRef = useRef(0);
+  const shouldScrollRef = useRef(true);
+
+  // Scroll xuống cuối khi mở chat mới
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, inputHeight]);
+    if (currentChat?.id) {
+      shouldScrollRef.current = true;
+    }
+  }, [currentChat?.id]);
+
+  useEffect(() => {
+    if (!messages.length) return;
+
+    const prevLength = prevMessagesLengthRef.current;
+    const newLength = messages.length;
+
+    if (shouldScrollRef.current) {
+      // Mở chat lần đầu → scroll xuống cuối sau khi render
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        shouldScrollRef.current = false;
+      }, 100);
+    } else if (newLength > prevLength && prevLength > 0) {
+      // Có tin mới (append ở cuối) → kiểm tra nếu đang ở gần cuối thì scroll
+      const container = messagesContainerRef.current;
+      if (container) {
+        const isNearBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+        if (isNearBottom) {
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 100);
+        }
+      }
+    }
+    // Load tin cũ (prepend) → không scroll, handleLoadMore đã giữ vị trí
+
+    prevMessagesLengthRef.current = newLength;
+  }, [messages.length]);
 
   const lastReadChatRef = useRef(null);
   const lastReadLengthRef = useRef(0);
@@ -169,6 +213,40 @@ const HomePage = () => {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const handleLoadMore = useCallback(async () => {
+    if (!currentChat?.id || isLoadingMore || !hasMore) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // Lưu scroll position trước khi load
+    const prevScrollHeight = container.scrollHeight;
+
+    setIsLoadingMore(true);
+    try {
+      await dispatch(getChatMessages(currentChat.id, currentPage + 1));
+    } finally {
+      setIsLoadingMore(false);
+    }
+
+    // Giữ vị trí scroll sau khi prepend tin cũ
+    requestAnimationFrame(() => {
+      const newScrollHeight = container.scrollHeight;
+      container.scrollTop = newScrollHeight - prevScrollHeight;
+    });
+  }, [currentChat?.id, isLoadingMore, hasMore, currentPage, dispatch]);
+
+  const handleMessagesScroll = useCallback(
+    (e) => {
+      const { scrollTop } = e.target;
+      // Khi scroll lên gần đầu (< 50px) → load thêm tin cũ
+      if (scrollTop < 50 && hasMore && !isLoadingMore) {
+        handleLoadMore();
+      }
+    },
+    [hasMore, isLoadingMore, handleLoadMore]
+  );
 
   const handleClick = (event) => {
     setAnchorEl(event.currentTarget);
@@ -577,12 +655,25 @@ const HomePage = () => {
 
             {/* Chat messages area */}
             <div
+              ref={messagesContainerRef}
+              onScroll={handleMessagesScroll}
               className="messages pt-20 px-3 overflow-y-auto flex flex-col space-y-2 bg-[#efeae2] absolute top-0 left-0 right-0"
               style={{
                 bottom: `${inputHeight}px`,
               }}
             >
               <div className="flex flex-col space-y-2 pb-4">
+                {/* Loading more indicator */}
+                {isLoadingMore && (
+                  <div className="flex justify-center items-center py-3">
+                    <div className="text-sm text-gray-500">Loading older messages...</div>
+                  </div>
+                )}
+                {!hasMore && messages.length > 0 && (
+                  <div className="flex justify-center items-center py-3">
+                    <div className="text-xs text-gray-400">Beginning of conversation</div>
+                  </div>
+                )}
                 {isLoadingMessages ? (
                   <div className="flex justify-center items-center h-20">
                     <div className="text-gray-500">Loading messages...</div>
