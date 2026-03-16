@@ -70,7 +70,8 @@ const messageReducer = (state = initialState, action) => {
     }
 
     case MARK_MESSAGE_FAILED: {
-      const { clientMessageId: failedCmid, chatId: failedChatId } = action.payload;
+      const { clientMessageId: failedCmid, chatId: failedChatId } =
+        action.payload;
       const failedMessages = state.messagesByChat[failedChatId]?.messages || [];
 
       return {
@@ -80,9 +81,7 @@ const messageReducer = (state = initialState, action) => {
           [failedChatId]: {
             ...state.messagesByChat[failedChatId],
             messages: failedMessages.map((m) =>
-              m.clientMessageId === failedCmid
-                ? { ...m, status: "FAILED" }
-                : m
+              m.clientMessageId === failedCmid ? { ...m, status: "FAILED" } : m,
             ),
           },
         },
@@ -94,22 +93,29 @@ const messageReducer = (state = initialState, action) => {
       const receivedChatId = receivedMessage.chat?.id;
       if (!receivedChatId) return state;
 
-      const currentMessages = state.messagesByChat[receivedChatId]?.messages || [];
+      const currentMessages =
+        state.messagesByChat[receivedChatId]?.messages || [];
 
       // Dedup by server id
-      if (receivedMessage.id && currentMessages.some((m) => m.id === receivedMessage.id)) {
+      if (
+        receivedMessage.id &&
+        currentMessages.some((m) => m.id === receivedMessage.id)
+      ) {
         return state;
       }
 
       // Replace optimistic message by clientMessageId
       if (receivedMessage.clientMessageId) {
         const optimisticIndex = currentMessages.findIndex(
-          (m) => m.clientMessageId === receivedMessage.clientMessageId
+          (m) => m.clientMessageId === receivedMessage.clientMessageId,
         );
         if (optimisticIndex >= 0) {
+          const optimisticMsg = currentMessages[optimisticIndex];
           const updatedMessages = [...currentMessages];
           updatedMessages[optimisticIndex] = {
             ...receivedMessage,
+            // Keep optimistic plaintext content (don't overwrite with encrypted)
+            content: optimisticMsg.content,
             status: "DELIVERED",
           };
           return {
@@ -132,7 +138,10 @@ const messageReducer = (state = initialState, action) => {
           ...state.messagesByChat,
           [receivedChatId]: {
             ...state.messagesByChat[receivedChatId],
-            messages: [...currentMessages, { ...receivedMessage, status: "DELIVERED" }],
+            messages: [
+              ...currentMessages,
+              { ...receivedMessage, status: "DELIVERED" },
+            ],
           },
         },
       };
@@ -179,11 +188,17 @@ const messageReducer = (state = initialState, action) => {
     }
 
     case GET_CHAT_MESSAGES_ERROR:
-      return { ...state, loading: false, messageLoading: false, error: action.payload };
+      return {
+        ...state,
+        loading: false,
+        messageLoading: false,
+        error: action.payload,
+      };
 
     case GET_MESSAGES_SINCE_SUCCESS: {
       const { chatId: sinceChatId, messages: newMessages } = action.payload;
-      const existingMessages = state.messagesByChat[sinceChatId]?.messages || [];
+      const existingMessages =
+        state.messagesByChat[sinceChatId]?.messages || [];
       return {
         ...state,
         loading: false,
@@ -238,30 +253,36 @@ const messageReducer = (state = initialState, action) => {
     // Delete message (for everyone) - local immediate removal
     case DELETE_MESSAGE_SUCCESS: {
       const delId = action.payload;
-      const delUpdated = Object.keys(state.messagesByChat).reduce((acc, cid) => {
-        acc[cid] = {
-          ...state.messagesByChat[cid],
-          messages: (state.messagesByChat[cid]?.messages || []).filter(
-            (msg) => msg.id !== delId,
-          ),
-        };
-        return acc;
-      }, {});
+      const delUpdated = Object.keys(state.messagesByChat).reduce(
+        (acc, cid) => {
+          acc[cid] = {
+            ...state.messagesByChat[cid],
+            messages: (state.messagesByChat[cid]?.messages || []).filter(
+              (msg) => msg.id !== delId,
+            ),
+          };
+          return acc;
+        },
+        {},
+      );
       return { ...state, messagesByChat: delUpdated };
     }
 
     // Delete for me - only remove from local store, no broadcast
     case DELETE_MESSAGE_FOR_ME_SUCCESS: {
       const delForMeId = action.payload;
-      const delForMeUpdated = Object.keys(state.messagesByChat).reduce((acc, cid) => {
-        acc[cid] = {
-          ...state.messagesByChat[cid],
-          messages: (state.messagesByChat[cid]?.messages || []).filter(
-            (msg) => msg.id !== delForMeId,
-          ),
-        };
-        return acc;
-      }, {});
+      const delForMeUpdated = Object.keys(state.messagesByChat).reduce(
+        (acc, cid) => {
+          acc[cid] = {
+            ...state.messagesByChat[cid],
+            messages: (state.messagesByChat[cid]?.messages || []).filter(
+              (msg) => msg.id !== delForMeId,
+            ),
+          };
+          return acc;
+        },
+        {},
+      );
       return { ...state, messagesByChat: delForMeUpdated };
     }
 
@@ -271,10 +292,20 @@ const messageReducer = (state = initialState, action) => {
       return { ...state, uploadingFile: true, uploadProgress: 0, error: null };
 
     case UPLOAD_FILE_SUCCESS:
-      return { ...state, uploadingFile: false, uploadProgress: 100, error: null };
+      return {
+        ...state,
+        uploadingFile: false,
+        uploadProgress: 100,
+        error: null,
+      };
 
     case UPLOAD_FILE_ERROR:
-      return { ...state, uploadingFile: false, uploadProgress: 0, error: action.payload };
+      return {
+        ...state,
+        uploadingFile: false,
+        uploadProgress: 0,
+        error: action.payload,
+      };
 
     // ===== TYPING =====
 
@@ -298,7 +329,9 @@ const messageReducer = (state = initialState, action) => {
         ...state,
         typingUsers: {
           ...state.typingUsers,
-          [stopTypingChatId]: existingTypingUsers.filter((u) => u.id !== userId),
+          [stopTypingChatId]: existingTypingUsers.filter(
+            (u) => u.id !== userId,
+          ),
         },
       };
     }
@@ -318,7 +351,8 @@ const messageReducer = (state = initialState, action) => {
       };
 
     case CLEAR_MESSAGE_DRAFT: {
-      const { [action.payload]: removed, ...remainingDrafts } = state.messageDrafts;
+      const { [action.payload]: removed, ...remainingDrafts } =
+        state.messageDrafts;
       return { ...state, messageDrafts: remainingDrafts };
     }
 
@@ -340,6 +374,7 @@ const updateMessageInArray = (messages, updatedMessage) => {
   const index = messages.findIndex((m) => m.id === updatedMessage.id);
   if (index >= 0) {
     const newMessages = [...messages];
+    // Merge: keep existing fields (sender, replyTo, etc.), overwrite only provided fields
     newMessages[index] = { ...newMessages[index], ...updatedMessage };
     return newMessages;
   }

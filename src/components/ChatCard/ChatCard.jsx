@@ -15,7 +15,7 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
       return chat.chatName || "Group Chat";
     } else {
       const otherUser = chat.members?.find(
-        (member) => member.id !== currentUser?.id
+        (member) => member.id !== currentUser?.id,
       );
       return otherUser?.fullName || "Unknown User";
     }
@@ -29,7 +29,7 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
       );
     } else {
       const otherUser = chat.members?.find(
-        (member) => member.id !== currentUser?.id
+        (member) => member.id !== currentUser?.id,
       );
       return (
         otherUser?.urlAvatar ||
@@ -41,7 +41,12 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
   const getLastMessage = () => {
     if (chatMessages.length > 0) {
       const lastMsg = chatMessages[chatMessages.length - 1];
-      return formatMessage(lastMsg.content, lastMsg.createdAt, lastMsg.sender?.id === currentUser?.id, lastMsg.messageType);
+      return formatMessage(
+        lastMsg.content,
+        lastMsg.createdAt,
+        lastMsg.sender?.id === currentUser?.id,
+        lastMsg.messageType,
+      );
     }
 
     if (chat._lastMessage) {
@@ -49,7 +54,7 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
         chat._lastMessage.content,
         chat._lastMessage.createdAt,
         chat._lastMessage.senderId === currentUser?.id,
-        chat._lastMessage.messageType
+        chat._lastMessage.messageType,
       );
     }
 
@@ -60,7 +65,12 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
     };
   };
 
-  const formatMessage = (content, createdAt, isFromCurrentUser, messageType) => {
+  const formatMessage = (
+    content,
+    createdAt,
+    isFromCurrentUser,
+    messageType,
+  ) => {
     const messageDate = new Date(createdAt);
     const now = new Date();
     const diffTime = now - messageDate;
@@ -92,8 +102,19 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
       const fileName = parts[1] || "File";
       displayContent = "📎 " + fileName;
     } else {
-      if (displayContent.length > 30) {
-        displayContent = displayContent.substring(0, 30) + "...";
+      try {
+        const parsed = JSON.parse(displayContent);
+        if (parsed._e2ee === true) {
+          displayContent = "🔒 Encrypted message";
+        } else {
+          if (displayContent.length > 30) {
+            displayContent = displayContent.substring(0, 30) + "...";
+          }
+        }
+      } catch {
+        if (displayContent.length > 30) {
+          displayContent = displayContent.substring(0, 30) + "...";
+        }
       }
     }
     if (isFromCurrentUser && chat.groupChat) {
@@ -134,12 +155,18 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
         <div className="flex justify-between items-center">
           <p
             className={`text-lg truncate ${
-              isActive ? "font-semibold" : unreadCount > 0 ? "font-bold" : "font-medium"
+              isActive
+                ? "font-semibold"
+                : unreadCount > 0
+                  ? "font-bold"
+                  : "font-medium"
             }`}
           >
             {displayName}
           </p>
-          <p className={`text-xs flex-shrink-0 ${unreadCount > 0 ? "text-green-600 font-semibold" : "text-gray-500"}`}>
+          <p
+            className={`text-xs flex-shrink-0 ${unreadCount > 0 ? "text-green-600 font-semibold" : "text-gray-500"}`}
+          >
             {lastMessage.timestamp}
           </p>
         </div>
@@ -150,8 +177,8 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
               lastMessage.content === "No messages yet"
                 ? "text-gray-400 italic"
                 : unreadCount > 0
-                ? "text-gray-800 font-semibold"
-                : "text-gray-600"
+                  ? "text-gray-800 font-semibold"
+                  : "text-gray-600"
             }`}
           >
             {lastMessage.content}
@@ -166,9 +193,7 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
             )}
 
             {/* Group chat indicator */}
-            {chat.groupChat && (
-              <div className="text-xs text-gray-400">👥</div>
-            )}
+            {chat.groupChat && <div className="text-xs text-gray-400">👥</div>}
           </div>
         </div>
       </div>

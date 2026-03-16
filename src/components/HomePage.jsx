@@ -14,6 +14,8 @@ import MessageCard from "./MessageCard/MessageCard";
 import { ImAttachment } from "react-icons/im";
 import { IoSend, IoClose } from "react-icons/io5";
 import EmojiPicker from "emoji-picker-react";
+import cryptoService from "../services/CryptoService";
+import api from "../config/api";
 import "./HomePage.css";
 import { useNavigate } from "react-router-dom";
 import Profile from "./Profile/Profile";
@@ -329,6 +331,52 @@ const HomePage = () => {
     dispatch(setActiveChat(chatData));
   };
 
+  /**
+   * Encrypt message content for all members in current chat
+   * Returns encrypted JSON string or original text if E2EE not available
+   */
+  const encryptForChat = async (plainText) => {
+    try {
+      if (!currentChat?.members || !cryptoService.hasKeyPair()) {
+        return plainText;
+      }
+
+      const recipients = [];
+      for (const member of currentChat.members) {
+        let publicKey = member.publicKey;
+        if (!publicKey) {
+          try {
+            const res = await api.get(`/api/users/${member.id}/public-key`);
+            publicKey = res.data.publicKey;
+          } catch {}
+        }
+        if (publicKey) {
+          recipients.push({ userId: member.id, publicKey });
+        }
+      }
+
+      if (recipients.length < currentChat.members.length) {
+        console.warn(
+          "[E2EE] Not all members have public keys, sending unencrypted",
+        );
+        return plainText;
+      }
+
+      const { encryptedContent, iv, encryptedKeys } =
+        await cryptoService.encryptForGroup(plainText, recipients);
+
+      return JSON.stringify({
+        _e2ee: true,
+        encryptedContent,
+        iv,
+        encryptedKeys,
+      });
+    } catch (error) {
+      console.error("[E2EE] Encryption failed, sending unencrypted:", error);
+      return plainText;
+    }
+  };
+
   const handleCreateNewMessage = async () => {
     if (!currentChat?.id || !content.trim() || isSendingMessage) return;
 
@@ -336,7 +384,6 @@ const HomePage = () => {
     const messageText = content.trim();
     const currentReplyTo = replyingTo;
 
-    // Stop typing indicator
     if (isTyping) {
       setIsTyping(false);
       sendTypingIndicator(currentChat.id, false);
@@ -382,11 +429,13 @@ const HomePage = () => {
     setTimeout(() => scrollToBottom(), 100);
 
     try {
+      const encryptedContent = await encryptForChat(messageText);
+
       let success = false;
       if (wsConnected) {
         success = sendWebSocketMessage(
           currentChat.id,
-          messageText,
+          encryptedContent,
           "TEXT",
           clientMessageId,
           currentReplyTo?.id,
@@ -395,7 +444,7 @@ const HomePage = () => {
       if (!success) {
         await dispatch(
           sendMessage({
-            content: messageText,
+            content: encryptedContent,
             chatId: currentChat.id,
             messageType: "TEXT",
             clientMessageId,

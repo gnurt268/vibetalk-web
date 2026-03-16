@@ -1,4 +1,5 @@
 import api from "../../config/api";
+import cryptoService from "../../services/CryptoService";
 import {
   REGISTER,
   LOGIN,
@@ -13,6 +14,32 @@ import {
   UPLOAD_AVATAR,
 } from "./ActionType";
 
+const setupE2EEKeys = async (token) => {
+  try {
+    if (!cryptoService.hasKeyPair()) {
+      const { publicKeyJwk } = await cryptoService.generateKeyPair();
+      await api.put(
+        "/api/users/public-key",
+        { publicKey: publicKeyJwk },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+    } else {
+      const publicKey = cryptoService.getStoredPublicKey();
+      await api.put(
+        "/api/users/public-key",
+        { publicKey },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+    }
+  } catch (error) {
+    console.error("[E2EE] Failed to setup keys:", error);
+  }
+};
+
 export const register = (data) => async (dispatch) => {
   try {
     const response = await api.post("/auth/register", data);
@@ -20,6 +47,7 @@ export const register = (data) => async (dispatch) => {
 
     if (resData.jwt) {
       localStorage.setItem("token", resData.jwt);
+      await setupE2EEKeys(resData.jwt);
     }
     dispatch({ type: REGISTER, payload: resData });
     return resData;
@@ -36,6 +64,7 @@ export const login = (data) => async (dispatch) => {
 
     if (resData.jwt) {
       localStorage.setItem("token", resData.jwt);
+      await setupE2EEKeys(resData.jwt);
     }
     dispatch({ type: LOGIN, payload: resData });
     return resData;
@@ -55,11 +84,14 @@ export const currentUser = (token) => async (dispatch) => {
     const resData = response.data;
 
     dispatch({ type: REQ_USER, payload: { user: resData, jwt: token } });
+
+    await setupE2EEKeys(token);
+
     return resData;
   } catch (error) {
     console.error(
       "error get current user: ",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }
@@ -119,7 +151,7 @@ export const changePassword = (data, token) => async (dispatch) => {
   } catch (error) {
     console.error(
       "error change password: ",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }
@@ -143,7 +175,7 @@ export const uploadAvatar = (file, token) => async (dispatch) => {
   } catch (error) {
     console.error(
       "error upload avatar: ",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }
@@ -158,7 +190,7 @@ export const uploadAvatarBase64 = (base64Image, token) => async (dispatch) => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      }
+      },
     );
     const resData = response.data;
 
@@ -167,7 +199,7 @@ export const uploadAvatarBase64 = (base64Image, token) => async (dispatch) => {
   } catch (error) {
     console.error(
       "error upload avatar base64: ",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }
@@ -176,6 +208,7 @@ export const uploadAvatarBase64 = (base64Image, token) => async (dispatch) => {
 export const logout = () => async (dispatch) => {
   try {
     localStorage.removeItem("token");
+    cryptoService.clearKeys();
     dispatch({ type: LOGOUT, payload: null });
   } catch (error) {
     console.error("error logout: ", error);
@@ -193,7 +226,7 @@ export const forgotPassword = (email) => async (dispatch) => {
   } catch (error) {
     console.error(
       "error forgot password: ",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }
@@ -209,7 +242,7 @@ export const resetPassword = (data) => async (dispatch) => {
   } catch (error) {
     console.error(
       "error reset password: ",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }
@@ -225,7 +258,7 @@ export const validateResetToken = (token) => async (dispatch) => {
   } catch (error) {
     console.error(
       "error validate token: ",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }

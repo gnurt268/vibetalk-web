@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { BsThreeDotsVertical } from "react-icons/bs";
 import { BsReply } from "react-icons/bs";
 import { MdEdit, MdDelete, MdDeleteOutline } from "react-icons/md";
+import cryptoService from "../../services/CryptoService";
 import {
   editMessage,
   deleteMessage,
@@ -21,6 +22,8 @@ const MessageCard = ({
   const [editContent, setEditContent] = useState(message?.content || "");
   const [showLightbox, setShowLightbox] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [decryptedContent, setDecryptedContent] = useState(null);
+  const [isDecrypting, setIsDecrypting] = useState(false);
   const dropdownRef = useRef(null);
 
   const { auth } = useSelector((store) => store);
@@ -44,6 +47,45 @@ const MessageCard = ({
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showDropdown]);
+
+  useEffect(() => {
+    const decryptIfNeeded = async () => {
+      if (!message?.content || message.messageType !== "TEXT") return;
+      if (cryptoService.isEncrypted(message.content)) {
+        setIsDecrypting(true);
+        try {
+          const parsed = cryptoService.parseEncryptedContent(message.content);
+          if (
+            parsed &&
+            parsed.encryptedKeys &&
+            parsed.encryptedContent &&
+            parsed.iv
+          ) {
+            const myUserId = currentUser?.id?.toString();
+            const myEncryptedKey = parsed.encryptedKeys[myUserId];
+            if (myEncryptedKey) {
+              const plainText = await cryptoService.decryptMessage(
+                parsed.encryptedContent,
+                myEncryptedKey,
+                parsed.iv,
+              );
+              setDecryptedContent(plainText);
+            } else {
+              setDecryptedContent("[No decryption key for you]");
+            }
+          }
+        } catch (error) {
+          console.error("[E2EE] Decrypt error:", error);
+          setDecryptedContent("[Decryption failed]");
+        }
+        setIsDecrypting(false);
+      }
+    };
+    decryptIfNeeded();
+  }, [message?.content, message?.messageType, currentUser?.id]);
+
+  const displayContent =
+    decryptedContent !== null ? decryptedContent : message?.content;
 
   // Parse content format: url|fileName|fileSize|caption
   const parseFileContent = (content) => {
@@ -178,8 +220,7 @@ const MessageCard = ({
         }`}
       >
         <BsThreeDotsVertical
-          className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
-          size={20}
+          className="text-gray-400 hover:text-gray-600 cursor-pointer text-sm p-1"
           onClick={(e) => {
             e.stopPropagation();
             setShowDropdown((prev) => !prev);
@@ -254,7 +295,7 @@ const MessageCard = ({
   return (
     <div
       id={messageDomId}
-      className={`flex items-center gap-1 max-w-[75%] ${isOwnMessage ? "self-end flex-row-reverse" : "self-start flex-row"}`}
+      className={`flex items-start max-w-[75%] ${isOwnMessage ? "self-end flex-row-reverse" : "self-start flex-row"}`}
       onMouseEnter={() => setShowOptions(true)}
       onMouseLeave={() => {
         if (!isEditing && !showDropdown) setShowOptions(false);
@@ -262,7 +303,7 @@ const MessageCard = ({
     >
       {/* Message bubble */}
       <div
-        className={`py-2 px-3 rounded-lg ${messageStyle} shadow-sm relative min-w-[80px] max-w-full`}
+        className={`py-2 px-3 rounded-lg ${messageStyle} shadow-sm relative`}
       >
         {/* Sender name for group chats (only for received messages) */}
         {!isOwnMessage && message.sender && (
@@ -428,9 +469,23 @@ const MessageCard = ({
           </div>
         ) : (
           <div>
-            <p className="text-sm break-words whitespace-pre-wrap">
-              {message.content}
-            </p>
+            {isDecrypting ? (
+              <p className="text-sm text-gray-400 italic">Decrypting...</p>
+            ) : (
+              <p className="text-sm break-words whitespace-pre-wrap">
+                {displayContent}
+              </p>
+            )}
+
+            {/* E2EE indicator */}
+            {decryptedContent !== null && (
+              <span
+                className="text-xs text-green-500"
+                title="End-to-end encrypted"
+              >
+                🔒
+              </span>
+            )}
 
             {/* Message edited indicator */}
             {message.updatedAt && message.updatedAt !== message.createdAt && (
