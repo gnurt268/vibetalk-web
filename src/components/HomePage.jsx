@@ -22,7 +22,7 @@ import CreateGroup from "./GroupChat/CreateGroup";
 import StartNewChat from "./Chat/StartNewChat";
 import { logout } from "../redux/Auth/Action";
 import { useDispatch, useSelector } from "react-redux";
-import { getUserChats, searchChats, setActiveChat } from "../redux/Chat/Action";
+import { getUserChats, searchChats, setActiveChat, getAllUnreadCounts, clearUnreadCount } from "../redux/Chat/Action";
 import useWebSocket from "../hooks/useWebSocket";
 
 import {
@@ -95,6 +95,7 @@ const HomePage = () => {
   useEffect(() => {
     if (currentUser) {
       dispatch(getUserChats());
+      dispatch(getAllUnreadCounts());
     }
   }, [dispatch, currentUser]);
 
@@ -102,6 +103,7 @@ const HomePage = () => {
     if (currentChat?.id) {
       dispatch(getChatMessages(currentChat.id));
       dispatch(markChatAsRead(currentChat.id));
+      dispatch(clearUnreadCount(currentChat.id));
     }
   }, [currentChat?.id, dispatch]);
 
@@ -561,6 +563,7 @@ const HomePage = () => {
                       <ChatCard
                         chat={chatItem}
                         isActive={currentChat?.id === chatItem?.id}
+                        unreadCount={chat?.unreadCounts?.[chatItem?.id] || 0}
                       />
                     </div>
                   ))

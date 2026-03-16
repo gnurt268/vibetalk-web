@@ -6,12 +6,24 @@ import {
   ADD_TYPING_USER,
   REMOVE_TYPING_USER,
 } from "../redux/Message/ActionType";
+import { INCREMENT_UNREAD_COUNT } from "../redux/Chat/ActionType";
 
 const useWebSocket = () => {
   const dispatch = useDispatch();
   const { auth, chat } = useSelector((store) => store);
   const connectedRef = useRef(false);
   const currentChatSubscriptionRef = useRef(null);
+  const activeChatIdRef = useRef(null);
+  const currentUserIdRef = useRef(null);
+
+  // Luôn cập nhật ref khi state thay đổi — tránh stale closure
+  useEffect(() => {
+    activeChatIdRef.current = chat?.activeChat?.id || null;
+  }, [chat?.activeChat?.id]);
+
+  useEffect(() => {
+    currentUserIdRef.current = auth?.user?.id || null;
+  }, [auth?.user?.id]);
 
   const handleMessageReceived = useCallback(
     (messageData) => {
@@ -35,6 +47,17 @@ const useWebSocket = () => {
         type: NEW_MESSAGE_RECEIVED,
         payload: transformedMessage,
       });
+
+      // Dùng ref để luôn có giá trị mới nhất
+      if (
+        messageData.chatId !== activeChatIdRef.current &&
+        messageData.senderId !== currentUserIdRef.current
+      ) {
+        dispatch({
+          type: INCREMENT_UNREAD_COUNT,
+          payload: messageData.chatId,
+        });
+      }
     },
     [dispatch]
   );
@@ -62,8 +85,7 @@ const useWebSocket = () => {
     [dispatch]
   );
 
-  const handlePresenceUpdate = useCallback((presenceData) => {
-  }, []);
+  const handlePresenceUpdate = useCallback((presenceData) => {}, []);
 
   const connect = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -101,14 +123,11 @@ const useWebSocket = () => {
   useEffect(() => {
     if (connectedRef.current && chat.activeChat?.id) {
       const chatId = chat.activeChat.id;
-
       webSocketService.subscribeToChat(chatId, handleMessageReceived);
       currentChatSubscriptionRef.current = chatId;
     } else if (currentChatSubscriptionRef.current) {
       webSocketService.unsubscribeFromChat(currentChatSubscriptionRef.current);
       currentChatSubscriptionRef.current = null;
-    } else {
-      console.warn("No active chat to subscribe to or already subscribed");
     }
   }, [chat.activeChat?.id, connectedRef.current, handleMessageReceived]);
 
@@ -117,7 +136,6 @@ const useWebSocket = () => {
       console.warn("WebSocket not connected, cannot send message");
       return false;
     }
-
     return webSocketService.sendChatMessage(chatId, content, messageType);
   }, []);
 
@@ -125,7 +143,6 @@ const useWebSocket = () => {
     if (!webSocketService.isConnected()) {
       return false;
     }
-
     return webSocketService.sendTypingIndicator(chatId, isTyping);
   }, []);
 
@@ -133,7 +150,6 @@ const useWebSocket = () => {
     if (!webSocketService.isConnected()) {
       return false;
     }
-
     return webSocketService.markMessageAsRead(messageId);
   }, []);
 
@@ -141,7 +157,6 @@ const useWebSocket = () => {
     if (auth.user && auth.jwt && !connectedRef.current) {
       connect();
     }
-
     return () => {
       disconnect();
     };

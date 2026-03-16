@@ -1,11 +1,16 @@
 import React from "react";
 import { useSelector } from "react-redux";
 
-const ChatCard = ({ chat, isActive }) => {
-  const { auth } = useSelector((store) => store);
-  const currentUser = auth?.user;
+const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
+  const store = useSelector((store) => store);
+  const currentUser = store.auth?.user;
+
+  // Lấy messages từ Redux store (messagesByChat) thay vì chat.messages
+  const chatMessages =
+    store.message?.messagesByChat?.[chat?.id]?.messages || [];
 
   if (!chat) return null;
+
   const getChatDisplayName = () => {
     if (chat.groupChat) {
       return chat.chatName || "Group Chat";
@@ -16,6 +21,7 @@ const ChatCard = ({ chat, isActive }) => {
       return otherUser?.fullName || "Unknown User";
     }
   };
+
   const getChatDisplayImage = () => {
     if (chat.groupChat) {
       return (
@@ -32,8 +38,12 @@ const ChatCard = ({ chat, isActive }) => {
       );
     }
   };
+
   const getLastMessage = () => {
-    if (!chat.messages || chat.messages.length === 0) {
+    // Ưu tiên lấy từ Redux store (có cập nhật realtime)
+    const messages = chatMessages.length > 0 ? chatMessages : chat.messages;
+
+    if (!messages || messages.length === 0) {
       return {
         content: "No messages yet",
         timestamp: "",
@@ -41,8 +51,8 @@ const ChatCard = ({ chat, isActive }) => {
       };
     }
 
-    const lastMessage = chat.messages[chat.messages.length - 1];
-    const isFromCurrentUser = lastMessage.sender.id === currentUser?.id;
+    const lastMessage = messages[messages.length - 1];
+    const isFromCurrentUser = lastMessage.sender?.id === currentUser?.id;
     const messageDate = new Date(lastMessage.createdAt);
     const now = new Date();
     const diffTime = now - messageDate;
@@ -65,7 +75,8 @@ const ChatCard = ({ chat, isActive }) => {
         day: "numeric",
       });
     }
-    let content = lastMessage.content;
+
+    let content = lastMessage.content || "";
     if (content.length > 30) {
       content = content.substring(0, 30) + "...";
     }
@@ -79,12 +90,8 @@ const ChatCard = ({ chat, isActive }) => {
       isFromCurrentUser,
     };
   };
-  const getUnreadCount = () => {
-    return 0;
-  };
 
   const lastMessage = getLastMessage();
-  const unreadCount = getUnreadCount();
   const displayName = getChatDisplayName();
   const displayImage = getChatDisplayImage();
 
@@ -105,7 +112,6 @@ const ChatCard = ({ chat, isActive }) => {
                 "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png";
             }}
           />
-          {/* Online status indicator (optional) */}
           {!chat.groupChat && (
             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
           )}
@@ -116,12 +122,12 @@ const ChatCard = ({ chat, isActive }) => {
         <div className="flex justify-between items-center">
           <p
             className={`text-lg truncate ${
-              isActive ? "font-semibold" : "font-medium"
+              isActive ? "font-semibold" : unreadCount > 0 ? "font-bold" : "font-medium"
             }`}
           >
             {displayName}
           </p>
-          <p className="text-xs text-gray-500 flex-shrink-0">
+          <p className={`text-xs flex-shrink-0 ${unreadCount > 0 ? "text-green-600 font-semibold" : "text-gray-500"}`}>
             {lastMessage.timestamp}
           </p>
         </div>
@@ -131,16 +137,18 @@ const ChatCard = ({ chat, isActive }) => {
             className={`text-sm truncate flex-1 ${
               lastMessage.content === "No messages yet"
                 ? "text-gray-400 italic"
+                : unreadCount > 0
+                ? "text-gray-800 font-semibold"
                 : "text-gray-600"
             }`}
           >
             {lastMessage.content}
           </p>
 
-          <div className="flex space-x-2 items-center flex-shrink-0">
+          <div className="flex space-x-2 items-center flex-shrink-0 ml-2">
             {/* Unread count badge */}
             {unreadCount > 0 && (
-              <div className="bg-green-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
+              <div className="bg-green-500 text-white text-xs rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1.5">
                 {unreadCount > 99 ? "99+" : unreadCount}
               </div>
             )}
@@ -148,13 +156,6 @@ const ChatCard = ({ chat, isActive }) => {
             {/* Group chat indicator */}
             {chat.groupChat && (
               <div className="text-xs text-gray-400">👥</div>
-            )}
-
-            {/* Message status for last message from current user */}
-            {lastMessage.isFromCurrentUser && (
-              <div className="text-xs text-gray-400">
-                ✓✓ {/* This could be dynamic based on read status */}
-              </div>
             )}
           </div>
         </div>

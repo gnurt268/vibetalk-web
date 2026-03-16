@@ -70,6 +70,11 @@ import {
   USER_JOINED_CHAT,
   USER_LEFT_CHAT,
   CHAT_DELETED,
+  GET_ALL_UNREAD_COUNTS,
+  GET_ALL_UNREAD_COUNTS_SUCCESS,
+  GET_ALL_UNREAD_COUNTS_ERROR,
+  CLEAR_UNREAD_COUNT,
+  INCREMENT_UNREAD_COUNT,
 } from "./ActionType";
 
 const initialState = {
@@ -614,6 +619,33 @@ const chatReducer = (state = initialState, action) => {
         ),
         activeChat:
           state.activeChat?.id === action.payload ? null : state.activeChat,
+      };
+
+    case GET_ALL_UNREAD_COUNTS_SUCCESS:
+      return {
+        ...state,
+        unreadCounts: {
+          ...state.unreadCounts,
+          ...action.payload,
+        },
+      };
+
+    case CLEAR_UNREAD_COUNT:
+      return {
+        ...state,
+        unreadCounts: {
+          ...state.unreadCounts,
+          [action.payload]: 0,
+        },
+      };
+
+    case INCREMENT_UNREAD_COUNT:
+      return {
+        ...state,
+        unreadCounts: {
+          ...state.unreadCounts,
+          [action.payload]: (state.unreadCounts[action.payload] || 0) + 1,
+        },
       };
 
     default:

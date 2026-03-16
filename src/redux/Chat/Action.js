@@ -66,6 +66,11 @@ import {
   SET_ACTIVE_CHAT,
   SET_CHAT_LOADING,
   CLEAR_CHAT_ERROR,
+  GET_ALL_UNREAD_COUNTS,
+  GET_ALL_UNREAD_COUNTS_SUCCESS,
+  GET_ALL_UNREAD_COUNTS_ERROR,
+  CLEAR_UNREAD_COUNT,
+  INCREMENT_UNREAD_COUNT,
 } from "./ActionType";
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
@@ -601,4 +606,36 @@ export const setChatLoading = (loading) => ({
 
 export const clearChatError = () => ({
   type: CLEAR_CHAT_ERROR,
+});
+
+export const getAllUnreadCounts = () => async (dispatch) => {
+  try {
+    dispatch({ type: GET_ALL_UNREAD_COUNTS });
+
+    const response = await api.get("/api/chats/unread-counts", {
+      headers: getAuthHeaders(),
+    });
+
+    dispatch({
+      type: GET_ALL_UNREAD_COUNTS_SUCCESS,
+      payload: response.data,
+    });
+
+    return response.data;
+  } catch (error) {
+    dispatch({
+      type: GET_ALL_UNREAD_COUNTS_ERROR,
+      payload: error.response?.data?.message || error.message,
+    });
+  }
+};
+
+export const clearUnreadCount = (chatId) => ({
+  type: CLEAR_UNREAD_COUNT,
+  payload: chatId,
+});
+
+export const incrementUnreadCount = (chatId) => ({
+  type: INCREMENT_UNREAD_COUNT,
+  payload: chatId,
 });
