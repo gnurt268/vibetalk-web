@@ -1,21 +1,14 @@
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { IoClose, IoCamera } from "react-icons/io5";
-import {
-  MdEdit,
-  MdPersonRemove,
-  MdAdminPanelSettings,
-  MdPersonAdd,
-} from "react-icons/md";
+import { MdEdit, MdPersonRemove, MdAdminPanelSettings, MdPersonAdd } from "react-icons/md";
 import {
   removeUserFromGroup,
   makeAdmin,
   removeAdmin,
-  updateGroupChat,
   addUserToGroup,
 } from "../../redux/Chat/Action";
 import { searchUser } from "../../redux/Auth/Action";
-import { fileUploadApi } from "../../config/api";
 import api from "../../config/api";
 
 const ChatInfoPanel = ({ chat, onClose }) => {
@@ -51,8 +44,13 @@ const ChatInfoPanel = ({ chat, onClose }) => {
       return;
     }
     try {
-      await dispatch(updateGroupChat(chat.id, { chatName: groupName.trim() }));
+      const token = localStorage.getItem("token");
+      await api.put(`/api/chats/${chat.id}/name`, groupName.trim(), {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
+      });
       setIsEditingName(false);
+      // Refresh chats
+      window.location.reload();
     } catch (error) {
       alert(error.response?.data?.message || "Failed to rename");
     }
@@ -63,14 +61,19 @@ const ChatInfoPanel = ({ chat, onClose }) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      // 1. Upload image
       const formData = new FormData();
       formData.append("file", file);
-      const uploadRes = await fileUploadApi.post(
-        "/api/users/upload-avatar",
-        formData,
-      );
+      const token = localStorage.getItem("token");
+      const uploadRes = await api.post("/api/users/upload-avatar", formData, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+      });
       const imageUrl = uploadRes.data.imageUrl;
-      await dispatch(updateGroupChat(chat.id, { chatImage: imageUrl }));
+      // 2. Update group image
+      await api.put(`/api/chats/${chat.id}/image`, imageUrl, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
+      });
+      window.location.reload();
     } catch (error) {
       alert("Failed to update group avatar");
     }
@@ -80,10 +83,7 @@ const ChatInfoPanel = ({ chat, onClose }) => {
   // ===== GROUP: Kick member =====
   const handleKickMember = async (userId) => {
     const member = members.find((m) => m.id === userId);
-    if (
-      !window.confirm(`Remove ${member?.fullName || "this user"} from group?`)
-    )
-      return;
+    if (!window.confirm(`Remove ${member?.fullName || "this user"} from group?`)) return;
     try {
       await dispatch(removeUserFromGroup(chat.id, userId));
     } catch (error) {
@@ -114,11 +114,9 @@ const ChatInfoPanel = ({ chat, onClose }) => {
     }
     setIsSearching(true);
     try {
-      const res = await dispatch(
-        searchUser({ keyword: query }, localStorage.getItem("token")),
-      );
+      const res = await dispatch(searchUser({ keyword: query }, localStorage.getItem("token")));
       const filtered = (res || []).filter(
-        (u) => !members.some((m) => m.id === u.id),
+        (u) => !members.some((m) => m.id === u.id)
       );
       setSearchResults(filtered);
     } catch {
@@ -164,10 +162,8 @@ const ChatInfoPanel = ({ chat, onClose }) => {
               className="w-20 h-20 rounded-full object-cover"
               src={
                 isGroupChat
-                  ? chat.chatImage ||
-                    "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
-                  : otherUser?.urlAvatar ||
-                    "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
+                  ? chat.chatImage || "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
+                  : otherUser?.urlAvatar || "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
               }
               alt="avatar"
             />
@@ -195,10 +191,7 @@ const ChatInfoPanel = ({ chat, onClose }) => {
                     onChange={(e) => setGroupName(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleRenameGroup();
-                      if (e.key === "Escape") {
-                        setIsEditingName(false);
-                        setGroupName(chat.chatName);
-                      }
+                      if (e.key === "Escape") { setIsEditingName(false); setGroupName(chat.chatName); }
                     }}
                     autoFocus
                   />
@@ -222,15 +215,11 @@ const ChatInfoPanel = ({ chat, onClose }) => {
               )}
             </div>
           ) : (
-            <h4 className="mt-3 text-lg font-semibold">
-              {otherUser?.fullName}
-            </h4>
+            <h4 className="mt-3 text-lg font-semibold">{otherUser?.fullName}</h4>
           )}
 
           {isGroupChat && (
-            <p className="text-sm text-gray-500 mt-1">
-              {members.length} members
-            </p>
+            <p className="text-sm text-gray-500 mt-1">{members.length} members</p>
           )}
           {!isGroupChat && otherUser?.email && (
             <p className="text-sm text-gray-500 mt-1">{otherUser.email}</p>
@@ -262,23 +251,11 @@ const ChatInfoPanel = ({ chat, onClose }) => {
                   }}
                   autoFocus
                 />
-                <button
-                  className="text-xs text-green-600 hover:underline"
-                  onClick={handleSaveNickname}
-                >
-                  Save
-                </button>
-                <button
-                  className="text-xs text-gray-500 hover:underline"
-                  onClick={() => setIsEditingNickname(false)}
-                >
-                  Cancel
-                </button>
+                <button className="text-xs text-green-600 hover:underline" onClick={handleSaveNickname}>Save</button>
+                <button className="text-xs text-gray-500 hover:underline" onClick={() => setIsEditingNickname(false)}>Cancel</button>
               </div>
             ) : (
-              <p className="text-sm text-gray-400 mt-1 italic">
-                No nickname set
-              </p>
+              <p className="text-sm text-gray-400 mt-1 italic">No nickname set</p>
             )}
           </div>
         )}
@@ -286,14 +263,10 @@ const ChatInfoPanel = ({ chat, onClose }) => {
         {/* E2EE indicator */}
         <div className="px-4 py-3 border-t border-gray-100">
           <div className="flex items-center space-x-2">
-            <span className="text-green-500"></span>
+            <span className="text-green-500">🔒</span>
             <div>
-              <p className="text-sm font-medium text-gray-700">
-                End-to-end encrypted
-              </p>
-              <p className="text-xs text-gray-500">
-                Messages are secured with E2EE
-              </p>
+              <p className="text-sm font-medium text-gray-700">End-to-end encrypted</p>
+              <p className="text-xs text-gray-500">Messages are secured with E2EE</p>
             </div>
           </div>
         </div>
@@ -302,9 +275,7 @@ const ChatInfoPanel = ({ chat, onClose }) => {
         {isGroupChat && (
           <div className="border-t border-gray-100">
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-sm font-semibold text-gray-700">
-                Members
-              </span>
+              <span className="text-sm font-semibold text-gray-700">Members</span>
               {isAdmin && (
                 <button
                   className="flex items-center space-x-1 text-xs text-green-600 hover:underline"
@@ -325,28 +296,18 @@ const ChatInfoPanel = ({ chat, onClose }) => {
                   value={searchQuery}
                   onChange={(e) => handleSearchUsers(e.target.value)}
                 />
-                {isSearching && (
-                  <p className="text-xs text-gray-400 mt-1">Searching...</p>
-                )}
+                {isSearching && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
                 {searchResults.map((user) => (
-                  <div
-                    key={user.id}
-                    className="flex items-center justify-between py-2 border-b border-gray-50"
-                  >
+                  <div key={user.id} className="flex items-center justify-between py-2 border-b border-gray-50">
                     <div className="flex items-center space-x-2">
                       <img
                         className="w-8 h-8 rounded-full object-cover"
-                        src={
-                          user.urlAvatar ||
-                          "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
-                        }
+                        src={user.urlAvatar || "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"}
                         alt=""
                       />
                       <div>
                         <p className="text-sm font-medium">{user.fullName}</p>
-                        <p className="text-xs text-gray-500">
-                          @{user.username}
-                        </p>
+                        <p className="text-xs text-gray-500">@{user.username}</p>
                       </div>
                     </div>
                     <button
@@ -364,45 +325,30 @@ const ChatInfoPanel = ({ chat, onClose }) => {
             <div className="px-4 pb-4">
               {members.map((member) => {
                 const isMemberOwner = chat.createdBy?.id === member.id;
-                const isMemberAdmin = chat.admins?.some(
-                  (a) => a.id === member.id,
-                );
+                const isMemberAdmin = chat.admins?.some((a) => a.id === member.id);
                 const isMe = member.id === currentUser?.id;
 
                 return (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0"
-                  >
+                  <div key={member.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
                     <div className="flex items-center space-x-2">
                       <img
                         className="w-9 h-9 rounded-full object-cover"
-                        src={
-                          member.urlAvatar ||
-                          "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
-                        }
+                        src={member.urlAvatar || "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"}
                         alt=""
                       />
                       <div>
                         <div className="flex items-center space-x-1">
                           <p className="text-sm font-medium">
-                            {member.fullName}
-                            {isMe ? " (You)" : ""}
+                            {member.fullName}{isMe ? " (You)" : ""}
                           </p>
                           {isMemberOwner && (
-                            <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
-                              Owner
-                            </span>
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">Owner</span>
                           )}
                           {isMemberAdmin && !isMemberOwner && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-                              Admin
-                            </span>
+                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Admin</span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500">
-                          @{member.username}
-                        </p>
+                        <p className="text-xs text-gray-500">@{member.username}</p>
                       </div>
                     </div>
 
@@ -412,9 +358,7 @@ const ChatInfoPanel = ({ chat, onClose }) => {
                         {isOwner && (
                           <button
                             className={`p-1.5 rounded-full hover:bg-gray-100 ${isMemberAdmin ? "text-blue-500" : "text-gray-400"}`}
-                            title={
-                              isMemberAdmin ? "Remove admin" : "Make admin"
-                            }
+                            title={isMemberAdmin ? "Remove admin" : "Make admin"}
                             onClick={() => handleToggleAdmin(member.id)}
                           >
                             <MdAdminPanelSettings className="text-base" />
