@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
+import cryptoService from "../../services/CryptoService";
 
 const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
   const store = useSelector((store) => store);
   const currentUser = store.auth?.user;
+  const [decryptedLastMsg, setDecryptedLastMsg] = useState(null);
 
   const chatMessages =
     store.message?.messagesByChat?.[chat?.id]?.messages || [];
@@ -105,7 +107,7 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
       try {
         const parsed = JSON.parse(displayContent);
         if (parsed._e2ee === true) {
-          displayContent = "🔒 Encrypted message";
+          displayContent = "Encrypted message";
         } else {
           if (displayContent.length > 30) {
             displayContent = displayContent.substring(0, 30) + "...";
@@ -127,6 +129,56 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
   const lastMessage = getLastMessage();
   const displayName = getChatDisplayName();
   const displayImage = getChatDisplayImage();
+
+  const rawLastContent =
+    chatMessages.length > 0
+      ? chatMessages[chatMessages.length - 1].content
+      : chat._lastMessage?.content || null;
+
+  useEffect(() => {
+    const decryptLast = async () => {
+      if (!rawLastContent) {
+        setDecryptedLastMsg(null);
+        return;
+      }
+      if (cryptoService.isEncrypted(rawLastContent)) {
+        try {
+          const parsed = cryptoService.parseEncryptedContent(rawLastContent);
+          const myUserId = currentUser?.id?.toString();
+          const myKey = parsed?.encryptedKeys?.[myUserId];
+          if (myKey && parsed.encryptedContent && parsed.iv) {
+            const decrypted = await cryptoService.decryptMessage(
+              parsed.encryptedContent,
+              myKey,
+              parsed.iv,
+            );
+            const isFromMe =
+              chatMessages.length > 0
+                ? chatMessages[chatMessages.length - 1].sender?.id ===
+                  currentUser?.id
+                : chat._lastMessage?.senderId === currentUser?.id;
+            let preview =
+              decrypted.length > 30
+                ? decrypted.substring(0, 30) + "..."
+                : decrypted;
+            if (isFromMe && chat.groupChat) {
+              preview = "You: " + preview;
+            }
+            setDecryptedLastMsg(preview);
+          } else {
+            setDecryptedLastMsg("Encrypted message");
+          }
+        } catch {
+          setDecryptedLastMsg("Encrypted message");
+        }
+      } else {
+        setDecryptedLastMsg(null);
+      }
+    };
+    decryptLast();
+  }, [rawLastContent, currentUser?.id]);
+
+  const displayLastMessage = decryptedLastMsg || lastMessage.content;
 
   return (
     <div
@@ -174,14 +226,14 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
         <div className="flex justify-between items-center mt-1">
           <p
             className={`text-sm truncate flex-1 ${
-              lastMessage.content === "No messages yet"
+              displayLastMessage === "No messages yet"
                 ? "text-gray-400 italic"
                 : unreadCount > 0
                   ? "text-gray-800 font-semibold"
                   : "text-gray-600"
             }`}
           >
-            {lastMessage.content}
+            {displayLastMessage}
           </p>
 
           <div className="flex space-x-2 items-center flex-shrink-0 ml-2">

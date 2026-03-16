@@ -11,6 +11,7 @@ import { TbCircleDashed } from "react-icons/tb";
 import { BsEmojiSmile, BsFilter, BsThreeDotsVertical } from "react-icons/bs";
 import ChatCard from "./ChatCard/ChatCard";
 import MessageCard from "./MessageCard/MessageCard";
+import ChatInfoPanel from "./ChatInfo/ChatInfoPanel";
 import { ImAttachment } from "react-icons/im";
 import { IoSend, IoClose } from "react-icons/io5";
 import EmojiPicker from "emoji-picker-react";
@@ -30,6 +31,9 @@ import {
   searchChats,
   setActiveChat,
   clearUnreadCount,
+  deleteGroupChat,
+  leaveGroup,
+  updateGroupChat,
 } from "../redux/Chat/Action";
 import useWebSocket from "../hooks/useWebSocket";
 
@@ -68,6 +72,17 @@ const HomePage = () => {
   const [filePreview, setFilePreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showChatSearch, setShowChatSearch] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [chatSearchResults, setChatSearchResults] = useState([]);
+  const [chatSearchIndex, setChatSearchIndex] = useState(-1);
+  const [activeSearchHighlight, setActiveSearchHighlight] = useState({
+    messageId: null,
+    query: "",
+  });
+  const [isSearchingChat, setIsSearchingChat] = useState(false);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showChatInfo, setShowChatInfo] = useState(false);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -77,6 +92,8 @@ const HomePage = () => {
   const inputContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const chatSearchRef = useRef(null);
+  const chatMenuRef = useRef(null);
 
   const store = useSelector((store) => store);
   const { auth } = store;
@@ -128,6 +145,9 @@ const HomePage = () => {
       dispatch(markChatAsRead(currentChat.id));
       dispatch(clearUnreadCount(currentChat.id));
       dispatch(clearReplyingTo());
+      closeChatSearch();
+      setShowChatMenu(false);
+      setShowChatInfo(false);
     }
   }, [currentChat?.id, dispatch]);
 
@@ -329,6 +349,114 @@ const HomePage = () => {
 
   const handleClickOnChatCard = (chatData) => {
     dispatch(setActiveChat(chatData));
+  };
+
+  // ===== CHAT SEARCH =====
+  const handleChatSearch = async () => {
+    if (!chatSearchQuery.trim() || !currentChat?.id) {
+      setChatSearchResults([]);
+      return;
+    }
+    setIsSearchingChat(true);
+    try {
+      const q = chatSearchQuery.trim().toLowerCase();
+      const matched = [];
+
+      for (const msg of messages) {
+        if (!msg.content) continue;
+
+        let searchText = msg.content;
+
+        if (cryptoService.isEncrypted(msg.content)) {
+          try {
+            const parsed = cryptoService.parseEncryptedContent(msg.content);
+            const myUserId = currentUser?.id?.toString();
+            const myKey = parsed?.encryptedKeys?.[myUserId];
+            if (myKey && parsed.encryptedContent && parsed.iv) {
+              searchText = await cryptoService.decryptMessage(
+                parsed.encryptedContent,
+                myKey,
+                parsed.iv,
+              );
+            } else {
+              continue;
+            }
+          } catch {
+            continue;
+          }
+        }
+
+        if (searchText.toLowerCase().includes(q)) {
+          matched.push({ ...msg, _searchText: searchText });
+        }
+      }
+
+      setChatSearchResults(matched);
+    } catch (error) {
+      console.error("Search error:", error);
+      setChatSearchResults([]);
+    }
+    setIsSearchingChat(false);
+  };
+
+  const scrollToMessage = (messageId) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.transition = "background-color 0.3s";
+      el.style.backgroundColor = "rgba(234, 179, 8, 0.2)";
+      setTimeout(() => {
+        el.style.backgroundColor = "transparent";
+      }, 2000);
+    }
+  };
+
+  const closeChatSearch = () => {
+    setShowChatSearch(false);
+    setChatSearchQuery("");
+    setChatSearchResults([]);
+    setChatSearchIndex(-1);
+    setActiveSearchHighlight({ messageId: null, query: "" });
+  };
+
+  // ===== CHAT MENU =====
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (chatMenuRef.current && !chatMenuRef.current.contains(e.target)) {
+        setShowChatMenu(false);
+      }
+    };
+    if (showChatMenu)
+      document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showChatMenu]);
+
+  const handleDeleteChat = async () => {
+    if (!currentChat?.id) return;
+    if (!window.confirm("Are you sure you want to delete this chat?")) return;
+    try {
+      await dispatch(deleteGroupChat(currentChat.id));
+      dispatch(setActiveChat(null));
+      dispatch(getUserChats());
+    } catch (error) {
+      console.error("Delete chat error:", error);
+      alert(error.response?.data?.message || "Failed to delete chat");
+    }
+    setShowChatMenu(false);
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!currentChat?.id) return;
+    if (!window.confirm("Are you sure you want to leave this group?")) return;
+    try {
+      await dispatch(leaveGroup(currentChat.id));
+      dispatch(setActiveChat(null));
+      dispatch(getUserChats());
+    } catch (error) {
+      console.error("Leave group error:", error);
+      alert(error.response?.data?.message || "Failed to leave group");
+    }
+    setShowChatMenu(false);
   };
 
   /**
@@ -862,279 +990,633 @@ const HomePage = () => {
 
         {/* Chat area when a chat is selected */}
         {currentChat && (
-          <div className="right w-[70%] h-full bg-white relative">
-            {/* Chat header */}
-            <div className="header absolute top-0 w-full bg-white border-b border-gray-200 shadow-sm z-10">
-              <div className="flex justify-between">
-                <div className="py-3 space-x-4 flex items-center px-3">
-                  <img
-                    className="rounded-full w-10 h-10 cursor-pointer"
-                    src={
-                      currentChat.chatImage ||
-                      "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
-                    }
-                    alt="chat"
-                  />
-                  <div className="flex flex-col">
-                    <p className="font-medium">
-                      {currentChat.groupChat
-                        ? currentChat.chatName || "Group Chat"
-                        : currentChat.members?.find(
-                            (member) => member.id !== currentUser?.id,
-                          )?.fullName || "Chat"}
-                    </p>
-                    {currentChat.groupChat && (
-                      <p className="text-xs text-gray-500">
-                        {currentChat.members?.length || 0} members
+          <div className="right w-[70%] h-full bg-white relative flex">
+            {/* Chat content area */}
+            <div className="flex-1 h-full relative min-w-0">
+              {/* Chat header */}
+              <div className="header absolute top-0 w-full bg-white border-b border-gray-200 shadow-sm z-10">
+                <div className="flex justify-between">
+                  <div className="py-3 space-x-4 flex items-center px-3">
+                    <img
+                      className="rounded-full w-10 h-10 cursor-pointer"
+                      src={
+                        currentChat.chatImage ||
+                        "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
+                      }
+                      alt="chat"
+                    />
+                    <div className="flex flex-col">
+                      <p className="font-medium">
+                        {currentChat.groupChat
+                          ? currentChat.chatName || "Group Chat"
+                          : currentChat.members?.find(
+                              (member) => member.id !== currentUser?.id,
+                            )?.fullName || "Chat"}
                       </p>
-                    )}
-                  </div>
-                </div>
-                <div className="py-3 flex space-x-4 items-center px-3 text-gray-600">
-                  <AiOutlineSearch className="cursor-pointer hover:text-gray-800" />
-                  <BsThreeDotsVertical className="cursor-pointer hover:text-gray-800" />
-                </div>
-              </div>
-            </div>
-
-            {/* Chat messages area */}
-            <div
-              ref={messagesContainerRef}
-              onScroll={handleMessagesScroll}
-              className="messages pt-20 px-3 overflow-y-auto flex flex-col space-y-2 bg-[#efeae2] absolute top-0 left-0 right-0"
-              style={{
-                bottom: `${inputHeight}px`,
-              }}
-            >
-              <div className="flex flex-col items-start space-y-2 pb-4">
-                {/* Loading more indicator */}
-                {isLoadingMore && (
-                  <div className="flex justify-center items-center py-3">
-                    <div className="text-sm text-gray-500">
-                      Loading older messages...
+                      {currentChat.groupChat && (
+                        <p className="text-xs text-gray-500">
+                          {currentChat.members?.length || 0} members
+                        </p>
+                      )}
                     </div>
                   </div>
-                )}
-                {!hasMore && messages.length > 0 && (
-                  <div className="flex justify-center items-center py-3">
-                    <div className="text-xs text-gray-400">
-                      Beginning of conversation
-                    </div>
-                  </div>
-                )}
-                {isLoadingMessages ? (
-                  <div className="flex justify-center items-center h-20">
-                    <div className="text-gray-500">Loading messages...</div>
-                  </div>
-                ) : messages.length > 0 ? (
-                  messages.map((msg, index) => (
-                    <MessageCard
-                      key={msg.id || msg.clientMessageId}
-                      message={msg}
-                      messageDomId={`msg-${msg.id}`}
-                      isReqUserMessage={msg.sender?.id === currentUser?.id}
-                      content={msg.content}
-                      onReply={(m) => {
-                        dispatch(setReplyingTo(m));
-                        textareaRef.current?.focus();
+                  <div className="py-3 flex space-x-4 items-center px-3 text-gray-600">
+                    <AiOutlineSearch
+                      className="cursor-pointer hover:text-gray-800 text-xl"
+                      onClick={() => {
+                        setShowChatSearch((prev) => !prev);
+                        if (showChatSearch) closeChatSearch();
                       }}
                     />
-                  ))
-                ) : (
-                  <div className="flex justify-center items-center h-20">
-                    <div className="text-gray-500">
-                      No messages yet. Start the conversation!
+                    <div className="relative" ref={chatMenuRef}>
+                      <BsThreeDotsVertical
+                        className="cursor-pointer hover:text-gray-800 text-xl"
+                        onClick={() => setShowChatMenu((prev) => !prev)}
+                      />
+                      {/* Chat menu dropdown */}
+                      {showChatMenu && (
+                        <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px] z-30">
+                          {/* Info */}
+                          <button
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                            onClick={() => {
+                              setShowChatInfo(true);
+                              setShowChatMenu(false);
+                              setShowChatSearch(false);
+                            }}
+                          >
+                            <span>ℹ️</span>
+                            <span>
+                              {currentChat.groupChat
+                                ? "Group info"
+                                : "Chat info"}
+                            </span>
+                          </button>
+
+                          {/* Private chat: Nickname */}
+                          {!currentChat.groupChat && (
+                            <button
+                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                              onClick={() => {
+                                setShowChatInfo(true);
+                                setShowChatMenu(false);
+                                setShowChatSearch(false);
+                              }}
+                            >
+                              <span>✏️</span>
+                              <span>Set nickname</span>
+                            </button>
+                          )}
+
+                          {/* Group: Members */}
+                          {currentChat.groupChat && (
+                            <button
+                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                              onClick={() => {
+                                setShowChatInfo(true);
+                                setShowChatMenu(false);
+                                setShowChatSearch(false);
+                              }}
+                            >
+                              <span>👥</span>
+                              <span>
+                                Members ({currentChat.members?.length || 0})
+                              </span>
+                            </button>
+                          )}
+
+                          {/* Group admin: Rename */}
+                          {currentChat.groupChat &&
+                            (currentChat.createdBy?.id === currentUser?.id ||
+                              currentChat.admins?.some(
+                                (a) => a.id === currentUser?.id,
+                              )) && (
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                                onClick={() => {
+                                  const newName = prompt(
+                                    "Enter new group name:",
+                                    currentChat.chatName,
+                                  );
+                                  if (
+                                    newName &&
+                                    newName.trim() &&
+                                    newName.trim() !== currentChat.chatName
+                                  ) {
+                                    dispatch(
+                                      updateGroupChat(currentChat.id, {
+                                        chatName: newName.trim(),
+                                      }),
+                                    );
+                                  }
+                                  setShowChatMenu(false);
+                                }}
+                              >
+                                <span>📝</span>
+                                <span>Change group name</span>
+                              </button>
+                            )}
+
+                          {/* Group admin: Change photo */}
+                          {currentChat.groupChat &&
+                            (currentChat.createdBy?.id === currentUser?.id ||
+                              currentChat.admins?.some(
+                                (a) => a.id === currentUser?.id,
+                              )) && (
+                              <label className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3 cursor-pointer">
+                                <span>📷</span>
+                                <span>Change group photo</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const formData = new FormData();
+                                      formData.append("file", file);
+                                      const token =
+                                        localStorage.getItem("token");
+                                      const uploadRes = await api.post(
+                                        "/api/users/upload-avatar",
+                                        formData,
+                                        {
+                                          headers: {
+                                            Authorization: `Bearer ${token}`,
+                                            "Content-Type":
+                                              "multipart/form-data",
+                                          },
+                                        },
+                                      );
+                                      await dispatch(
+                                        updateGroupChat(currentChat.id, {
+                                          chatImage: uploadRes.data.imageUrl,
+                                        }),
+                                      );
+                                      dispatch(getUserChats());
+                                    } catch (err) {
+                                      alert("Failed to update group photo");
+                                    }
+                                    e.target.value = "";
+                                    setShowChatMenu(false);
+                                  }}
+                                />
+                              </label>
+                            )}
+
+                          {/* Group admin: Add member */}
+                          {currentChat.groupChat &&
+                            (currentChat.createdBy?.id === currentUser?.id ||
+                              currentChat.admins?.some(
+                                (a) => a.id === currentUser?.id,
+                              )) && (
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                                onClick={() => {
+                                  setShowChatInfo(true);
+                                  setShowChatMenu(false);
+                                  setShowChatSearch(false);
+                                }}
+                              >
+                                <span>➕</span>
+                                <span>Add member</span>
+                              </button>
+                            )}
+
+                          <div className="border-t border-gray-100 my-1"></div>
+
+                          {/* Group: Leave */}
+                          {currentChat.groupChat && (
+                            <button
+                              className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                              onClick={handleLeaveGroup}
+                            >
+                              <span>🚪</span>
+                              <span>Leave group</span>
+                            </button>
+                          )}
+
+                          {/* Delete chat */}
+                          <button
+                            className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                            onClick={handleDeleteChat}
+                          >
+                            <span>🗑️</span>
+                            <span>Delete chat</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-                {/* Typing Indicator */}
-                <TypingIndicator />
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-
-            {/* Message input */}
-            <div
-              ref={inputContainerRef}
-              className="absolute bottom-0 left-0 right-0 bg-[#f0f2f5] px-3 py-2 flex flex-col"
-              style={{ minHeight: `${inputHeight}px` }}
-            >
-              {/* Reply preview bar */}
-              {replyingTo && (
-                <div className="mb-2 p-2 bg-white rounded-lg border-l-4 border-green-500 flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-green-600">
-                      {replyingTo.sender?.id === currentUser?.id
-                        ? "You"
-                        : replyingTo.sender?.fullName}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {replyingTo.messageType === "IMAGE"
-                        ? "📷 Photo"
-                        : replyingTo.messageType === "FILE"
-                          ? "📎 File"
-                          : replyingTo.content}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => dispatch(clearReplyingTo())}
-                    className="p-1 hover:bg-gray-100 rounded-full ml-2 flex-shrink-0"
-                  >
-                    <IoClose className="text-lg text-gray-500" />
-                  </button>
                 </div>
-              )}
+              </div>
 
-              {/* File preview */}
-              {selectedFile && (
-                <div className="mb-2 p-2 bg-white rounded-lg border border-gray-200 flex items-center space-x-3">
-                  {filePreview ? (
-                    <img
-                      src={filePreview}
-                      alt="preview"
-                      className="w-16 h-16 object-cover rounded-md"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center text-2xl">
-                      📎
+              {/* Chat messages area */}
+              <div
+                ref={messagesContainerRef}
+                onScroll={handleMessagesScroll}
+                className="messages pt-20 px-3 overflow-y-auto flex flex-col space-y-2 bg-[#efeae2] absolute top-0 left-0 right-0"
+                style={{
+                  bottom: `${inputHeight}px`,
+                }}
+              >
+                <div className="flex flex-col items-start space-y-2 pb-4">
+                  {/* Loading more indicator */}
+                  {isLoadingMore && (
+                    <div className="flex justify-center items-center py-3">
+                      <div className="text-sm text-gray-500">
+                        Loading older messages...
+                      </div>
                     </div>
                   )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-700 truncate">
-                      {selectedFile.name}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {formatFileSize(selectedFile.size)}
-                    </p>
-                    {isUploadingFile && (
-                      <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
-                        <div
-                          className="bg-green-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
+                  {!hasMore && messages.length > 0 && (
+                    <div className="flex justify-center items-center py-3">
+                      <div className="text-xs text-gray-400">
+                        Beginning of conversation
+                      </div>
+                    </div>
+                  )}
+                  {isLoadingMessages ? (
+                    <div className="flex justify-center items-center h-20">
+                      <div className="text-gray-500">Loading messages...</div>
+                    </div>
+                  ) : messages.length > 0 ? (
+                    messages.map((msg, index) => (
+                      <MessageCard
+                        key={msg.id || msg.clientMessageId}
+                        message={msg}
+                        messageDomId={`msg-${msg.id}`}
+                        isReqUserMessage={msg.sender?.id === currentUser?.id}
+                        content={msg.content}
+                        highlightText={
+                          activeSearchHighlight.messageId === msg.id
+                            ? activeSearchHighlight.query
+                            : ""
+                        }
+                        encryptFn={encryptForChat}
+                        onReply={(m) => {
+                          dispatch(setReplyingTo(m));
+                          textareaRef.current?.focus();
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <div className="flex justify-center items-center h-20">
+                      <div className="text-gray-500">
+                        No messages yet. Start the conversation!
+                      </div>
+                    </div>
+                  )}
+                  {/* Typing Indicator */}
+                  <TypingIndicator />
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+
+              {/* Message input */}
+              <div
+                ref={inputContainerRef}
+                className="absolute bottom-0 left-0 right-0 bg-[#f0f2f5] px-3 py-2 flex flex-col"
+                style={{ minHeight: `${inputHeight}px` }}
+              >
+                {/* Reply preview bar */}
+                {replyingTo && (
+                  <div className="mb-2 p-2 bg-white rounded-lg border-l-4 border-green-500 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-green-600">
+                        {replyingTo.sender?.id === currentUser?.id
+                          ? "You"
+                          : replyingTo.sender?.fullName}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {replyingTo.messageType === "IMAGE"
+                          ? "📷 Photo"
+                          : replyingTo.messageType === "FILE"
+                            ? "📎 File"
+                            : replyingTo.content}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => dispatch(clearReplyingTo())}
+                      className="p-1 hover:bg-gray-100 rounded-full ml-2 flex-shrink-0"
+                    >
+                      <IoClose className="text-lg text-gray-500" />
+                    </button>
+                  </div>
+                )}
+
+                {/* File preview */}
+                {selectedFile && (
+                  <div className="mb-2 p-2 bg-white rounded-lg border border-gray-200 flex items-center space-x-3">
+                    {filePreview ? (
+                      <img
+                        src={filePreview}
+                        alt="preview"
+                        className="w-16 h-16 object-cover rounded-md"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center text-2xl">
+                        📎
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-700 truncate">
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatFileSize(selectedFile.size)}
+                      </p>
+                      {isUploadingFile && (
+                        <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            className="bg-green-500 h-1.5 rounded-full transition-all duration-300"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleFileRemove}
+                      className="p-1 hover:bg-gray-100 rounded-full"
+                      disabled={isUploadingFile}
+                    >
+                      <IoClose className="text-xl text-gray-500" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Input row */}
+                <div className="flex items-end space-x-3">
+                  <div className="relative" ref={emojiPickerRef}>
+                    <BsEmojiSmile
+                      className={`text-2xl cursor-pointer transition-colors ${
+                        showEmojiPicker
+                          ? "text-green-600"
+                          : "text-gray-500 hover:text-gray-700"
+                      }`}
+                      onClick={() => setShowEmojiPicker((prev) => !prev)}
+                    />
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-10 left-0 z-50 shadow-xl rounded-lg">
+                        <EmojiPicker
+                          onEmojiClick={handleEmojiClick}
+                          width={320}
+                          height={400}
+                          searchPlaceHolder="Search emoji..."
+                          previewConfig={{ showPreview: false }}
+                          skinTonesDisabled
+                          lazyLoadEmojis
                         />
                       </div>
                     )}
                   </div>
+
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"
+                  />
+                  <ImAttachment
+                    className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700"
+                    onClick={() => fileInputRef.current?.click()}
+                  />
+
+                  <div className="flex-1 relative">
+                    <textarea
+                      ref={textareaRef}
+                      className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
+                      placeholder={
+                        selectedFile ? "Add a caption..." : "Type a message..."
+                      }
+                      value={content}
+                      onChange={(e) => handleContentChange(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (selectedFile) {
+                            handleSendFile();
+                          } else {
+                            handleCreateNewMessage();
+                          }
+                        }
+                      }}
+                      style={{ minHeight: "40px", maxHeight: "120px" }}
+                      onInput={(e) => {
+                        e.target.style.height = "auto";
+                        const newHeight = Math.min(
+                          Math.max(e.target.scrollHeight, 40),
+                          120,
+                        );
+                        e.target.style.height = newHeight + "px";
+                        setInputHeight(Math.max(100, newHeight + 60));
+                      }}
+                      disabled={isSendingMessage || isUploadingFile}
+                    />
+                  </div>
+
                   <button
-                    onClick={handleFileRemove}
-                    className="p-1 hover:bg-gray-100 rounded-full"
-                    disabled={isUploadingFile}
+                    onClick={
+                      selectedFile ? handleSendFile : handleCreateNewMessage
+                    }
+                    disabled={
+                      selectedFile
+                        ? isUploadingFile
+                        : !content.trim() || isSendingMessage
+                    }
+                    className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                    title={
+                      selectedFile
+                        ? isUploadingFile
+                          ? `Uploading... ${uploadProgress}%`
+                          : "Send file"
+                        : wsConnected
+                          ? "Send via WebSocket"
+                          : "Send via HTTP"
+                    }
                   >
-                    <IoClose className="text-xl text-gray-500" />
+                    {isUploadingFile ? (
+                      <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <IoSend
+                        className={`text-2xl ${
+                          selectedFile
+                            ? "text-green-600 hover:text-green-700"
+                            : !content.trim() || isSendingMessage
+                              ? "text-gray-400"
+                              : wsConnected
+                                ? "text-green-600 hover:text-green-700"
+                                : "text-blue-600 hover:text-blue-700"
+                        } transition-colors`}
+                      />
+                    )}
                   </button>
                 </div>
-              )}
-
-              {/* Input row */}
-              <div className="flex items-end space-x-3">
-                <div className="relative" ref={emojiPickerRef}>
-                  <BsEmojiSmile
-                    className={`text-2xl cursor-pointer transition-colors ${
-                      showEmojiPicker
-                        ? "text-green-600"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
-                    onClick={() => setShowEmojiPicker((prev) => !prev)}
-                  />
-                  {showEmojiPicker && (
-                    <div className="absolute bottom-10 left-0 z-50 shadow-xl rounded-lg">
-                      <EmojiPicker
-                        onEmojiClick={handleEmojiClick}
-                        width={320}
-                        height={400}
-                        searchPlaceHolder="Search emoji..."
-                        previewConfig={{ showPreview: false }}
-                        skinTonesDisabled
-                        lazyLoadEmojis
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Hidden file input */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"
-                />
-                <ImAttachment
-                  className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700"
-                  onClick={() => fileInputRef.current?.click()}
-                />
-
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={textareaRef}
-                    className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
-                    placeholder={
-                      selectedFile ? "Add a caption..." : "Type a message..."
-                    }
-                    value={content}
-                    onChange={(e) => handleContentChange(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (selectedFile) {
-                          handleSendFile();
-                        } else {
-                          handleCreateNewMessage();
-                        }
-                      }
-                    }}
-                    style={{ minHeight: "40px", maxHeight: "120px" }}
-                    onInput={(e) => {
-                      e.target.style.height = "auto";
-                      const newHeight = Math.min(
-                        Math.max(e.target.scrollHeight, 40),
-                        120,
-                      );
-                      e.target.style.height = newHeight + "px";
-                      setInputHeight(Math.max(100, newHeight + 60));
-                    }}
-                    disabled={isSendingMessage || isUploadingFile}
-                  />
-                </div>
-
-                <button
-                  onClick={
-                    selectedFile ? handleSendFile : handleCreateNewMessage
-                  }
-                  disabled={
-                    selectedFile
-                      ? isUploadingFile
-                      : !content.trim() || isSendingMessage
-                  }
-                  className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  title={
-                    selectedFile
-                      ? isUploadingFile
-                        ? `Uploading... ${uploadProgress}%`
-                        : "Send file"
-                      : wsConnected
-                        ? "Send via WebSocket"
-                        : "Send via HTTP"
-                  }
-                >
-                  {isUploadingFile ? (
-                    <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <IoSend
-                      className={`text-2xl ${
-                        selectedFile
-                          ? "text-green-600 hover:text-green-700"
-                          : !content.trim() || isSendingMessage
-                            ? "text-gray-400"
-                            : wsConnected
-                              ? "text-green-600 hover:text-green-700"
-                              : "text-blue-600 hover:text-blue-700"
-                      } transition-colors`}
-                    />
-                  )}
-                </button>
               </div>
             </div>
+            {/* end chat content area */}
+
+            {/* Chat Info Panel */}
+            {showChatInfo && (
+              <ChatInfoPanel
+                chat={currentChat}
+                onClose={() => setShowChatInfo(false)}
+              />
+            )}
+
+            {/* Search Panel (Messenger style) */}
+            {showChatSearch && (
+              <div className="w-[320px] h-full bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
+                {/* Search header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                  <h3 className="font-semibold text-gray-800">Search</h3>
+                  <IoClose
+                    className="text-xl text-gray-500 cursor-pointer hover:text-gray-800"
+                    onClick={closeChatSearch}
+                  />
+                </div>
+
+                {/* Search input */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-center bg-gray-100 rounded-full px-3 py-2">
+                    <AiOutlineSearch className="text-gray-400 mr-2" />
+                    <input
+                      ref={chatSearchRef}
+                      type="text"
+                      placeholder="Search messages..."
+                      className="flex-1 bg-transparent outline-none text-sm"
+                      value={chatSearchQuery}
+                      onChange={(e) => setChatSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleChatSearch();
+                        if (e.key === "Escape") closeChatSearch();
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                {/* Results count */}
+                {chatSearchResults.length > 0 && (
+                  <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
+                    {chatSearchResults.length} results
+                  </div>
+                )}
+
+                {/* Search results list */}
+                <div className="flex-1 overflow-y-auto">
+                  {isSearchingChat && (
+                    <div className="flex justify-center py-8">
+                      <span className="text-sm text-gray-400">
+                        Searching...
+                      </span>
+                    </div>
+                  )}
+
+                  {!isSearchingChat &&
+                    chatSearchQuery &&
+                    chatSearchResults.length === 0 && (
+                      <div className="flex justify-center py-8">
+                        <span className="text-sm text-gray-400">
+                          No results found
+                        </span>
+                      </div>
+                    )}
+
+                  {chatSearchResults.map((msg) => {
+                    const isOwn = msg.sender?.id === currentUser?.id;
+                    const senderName = isOwn
+                      ? "You"
+                      : msg.sender?.fullName || "Unknown";
+                    const time = new Date(msg.createdAt);
+                    const timeStr =
+                      time.toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      }) +
+                      " " +
+                      time.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                      });
+
+                    const q = chatSearchQuery.trim().toLowerCase();
+                    const contentText = msg._searchText || msg.content || "";
+                    const matchIdx = contentText.toLowerCase().indexOf(q);
+                    let preview;
+                    if (matchIdx >= 0) {
+                      const start = Math.max(0, matchIdx - 20);
+                      const end = Math.min(
+                        contentText.length,
+                        matchIdx + q.length + 30,
+                      );
+                      const before =
+                        (start > 0 ? "..." : "") +
+                        contentText.slice(start, matchIdx);
+                      const match = contentText.slice(
+                        matchIdx,
+                        matchIdx + q.length,
+                      );
+                      const after =
+                        contentText.slice(matchIdx + q.length, end) +
+                        (end < contentText.length ? "..." : "");
+                      preview = (
+                        <span>
+                          {before}
+                          <mark className="bg-yellow-200 rounded">{match}</mark>
+                          {after}
+                        </span>
+                      );
+                    } else {
+                      preview =
+                        contentText.length > 50
+                          ? contentText.slice(0, 50) + "..."
+                          : contentText;
+                    }
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className="flex items-start px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 transition-colors"
+                        onClick={() => {
+                          setActiveSearchHighlight({
+                            messageId: msg.id,
+                            query: chatSearchQuery.trim(),
+                          });
+                          scrollToMessage(msg.id);
+                        }}
+                      >
+                        <img
+                          className="w-9 h-9 rounded-full object-cover flex-shrink-0 mr-3"
+                          src={
+                            msg.sender?.urlAvatar ||
+                            "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
+                          }
+                          alt=""
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-800 truncate">
+                              {senderName}
+                            </span>
+                            <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                              {timeStr}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
+                            {preview}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

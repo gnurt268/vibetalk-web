@@ -15,6 +15,8 @@ const MessageCard = ({
   isRequestUserMessage,
   onReply,
   messageDomId,
+  highlightText,
+  encryptFn,
 }) => {
   const [showOptions, setShowOptions] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -87,7 +89,12 @@ const MessageCard = ({
   const displayContent =
     decryptedContent !== null ? decryptedContent : message?.content;
 
-  // Parse content format: url|fileName|fileSize|caption
+  useEffect(() => {
+    if (decryptedContent !== null && !isEditing) {
+      setEditContent(decryptedContent);
+    }
+  }, [decryptedContent]);
+
   const parseFileContent = (content) => {
     if (!content) return { url: "", fileName: "", fileSize: 0, caption: "" };
     const parts = content.split("|");
@@ -122,6 +129,24 @@ const MessageCard = ({
     return text.length > 60 ? text.substring(0, 60) + "..." : text;
   };
 
+  const renderHighlightedText = (text) => {
+    if (!highlightText || !text) return text;
+    const regex = new RegExp(
+      `(${highlightText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+      "gi",
+    );
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-yellow-300 rounded px-0.5">
+          {part}
+        </mark>
+      ) : (
+        part
+      ),
+    );
+  };
+
   const formatTimestamp = (timestamp) => {
     const messageDate = new Date(timestamp);
     const now = new Date();
@@ -154,9 +179,14 @@ const MessageCard = ({
     }
   };
   const handleEditMessage = async () => {
-    if (editContent.trim() && editContent !== message.content) {
+    if (editContent.trim() && editContent.trim() !== displayContent) {
       try {
-        await dispatch(editMessage(message.id, editContent.trim()));
+        let contentToSend = editContent.trim();
+        if (encryptFn) {
+          contentToSend = await encryptFn(contentToSend);
+        }
+        await dispatch(editMessage(message.id, contentToSend));
+        setDecryptedContent(editContent.trim());
         setIsEditing(false);
         setShowOptions(false);
       } catch (error) {
@@ -164,7 +194,7 @@ const MessageCard = ({
       }
     } else {
       setIsEditing(false);
-      setEditContent(message.content);
+      setEditContent(displayContent || message.content);
     }
   };
 
@@ -196,7 +226,7 @@ const MessageCard = ({
 
   const handleCancelEdit = () => {
     setIsEditing(false);
-    setEditContent(message.content);
+    setEditContent(displayContent || message.content);
     setShowOptions(false);
   };
 
@@ -473,18 +503,10 @@ const MessageCard = ({
               <p className="text-sm text-gray-400 italic">Decrypting...</p>
             ) : (
               <p className="text-sm break-words whitespace-pre-wrap">
-                {displayContent}
+                {highlightText
+                  ? renderHighlightedText(displayContent)
+                  : displayContent}
               </p>
-            )}
-
-            {/* E2EE indicator */}
-            {decryptedContent !== null && (
-              <span
-                className="text-xs text-green-500"
-                title="End-to-end encrypted"
-              >
-                🔒
-              </span>
             )}
 
             {/* Message edited indicator */}
