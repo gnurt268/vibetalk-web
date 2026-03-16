@@ -56,6 +56,8 @@ import {
   UPLOAD_FILE_ERROR,
   ADD_OPTIMISTIC_MESSAGE,
   MARK_MESSAGE_FAILED,
+  SET_REPLYING_TO,
+  CLEAR_REPLYING_TO,
 } from "./ActionType";
 
 export {
@@ -78,7 +80,7 @@ export const sendMessage = (messageData) => async (dispatch) => {
   try {
     dispatch({ type: SEND_MESSAGE });
 
-    const { content, chatId, messageType = "TEXT", clientMessageId } = messageData;
+    const { content, chatId, messageType = "TEXT", clientMessageId, replyToId } = messageData;
 
     const response = await api.post(
       "/api/messages/send",
@@ -87,6 +89,7 @@ export const sendMessage = (messageData) => async (dispatch) => {
         chatId,
         messageType,
         clientMessageId,
+        replyToId: replyToId || null,
       },
       {
         headers: getAuthHeaders(),
@@ -560,3 +563,11 @@ export const uploadAndSendFile =
       throw error;
     }
   };
+export const setReplyingTo = (message) => ({
+  type: SET_REPLYING_TO,
+  payload: message,
+});
+
+export const clearReplyingTo = () => ({
+  type: CLEAR_REPLYING_TO,
+});

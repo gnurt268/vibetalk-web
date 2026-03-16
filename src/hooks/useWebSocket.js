@@ -5,6 +5,8 @@ import {
   NEW_MESSAGE_RECEIVED,
   ADD_TYPING_USER,
   REMOVE_TYPING_USER,
+  MESSAGE_UPDATED,
+  MESSAGE_DELETED,
 } from "../redux/Message/ActionType";
 import { INCREMENT_UNREAD_COUNT, UPDATE_CHAT_LAST_MESSAGE } from "../redux/Chat/ActionType";
 
@@ -47,6 +49,14 @@ const useWebSocket = () => {
         chat: {
           id: messageData.chatId,
         },
+        replyTo: messageData.replyToId
+          ? {
+              id: messageData.replyToId,
+              content: messageData.replyToContent,
+              sender: { fullName: messageData.replyToSenderName },
+              messageType: messageData.replyToMessageType,
+            }
+          : null,
       };
 
       dispatch({
@@ -107,6 +117,27 @@ const useWebSocket = () => {
 
   const handlePresenceUpdate = useCallback((presenceData) => {}, []);
 
+  const handleMessageUpdate = useCallback(
+    (updateData) => {
+      if (updateData.updateType === "EDITED") {
+        dispatch({
+          type: MESSAGE_UPDATED,
+          payload: {
+            id: updateData.messageId,
+            content: updateData.newContent,
+            chat: { id: updateData.chatId },
+          },
+        });
+      } else if (updateData.updateType === "DELETED") {
+        dispatch({
+          type: MESSAGE_DELETED,
+          payload: updateData.messageId,
+        });
+      }
+    },
+    [dispatch]
+  );
+
   const connect = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (connectedRef.current || !auth.user || !auth.jwt) {
@@ -119,7 +150,8 @@ const useWebSocket = () => {
         handleMessageReceived,
         handleTypingUpdate,
         handlePresenceUpdate,
-        auth.user.id
+        auth.user.id,
+        handleMessageUpdate
       );
       connectedRef.current = true;
     } catch (error) {
@@ -132,6 +164,7 @@ const useWebSocket = () => {
     handleMessageReceived,
     handleTypingUpdate,
     handlePresenceUpdate,
+    handleMessageUpdate,
   ]);
 
   const disconnect = useCallback(() => {
@@ -142,12 +175,12 @@ const useWebSocket = () => {
   }, []);
 
 
-  const sendMessage = useCallback((chatId, content, messageType = "TEXT", clientMessageId) => {
+  const sendMessage = useCallback((chatId, content, messageType = "TEXT", clientMessageId, replyToId) => {
     if (!webSocketService.isConnected()) {
       console.warn("WebSocket not connected, cannot send message");
       return false;
     }
-    return webSocketService.sendChatMessage(chatId, content, messageType, clientMessageId);
+    return webSocketService.sendChatMessage(chatId, content, messageType, clientMessageId, replyToId);
   }, []);
 
   const sendTypingIndicator = useCallback((chatId, isTyping) => {

@@ -89,3 +89,7 @@ export const UPLOAD_FILE_ERROR = "UPLOAD_FILE_ERROR";
 // Optimistic UI Actions
 export const ADD_OPTIMISTIC_MESSAGE = "ADD_OPTIMISTIC_MESSAGE";
 export const MARK_MESSAGE_FAILED = "MARK_MESSAGE_FAILED";
+
+// Reply Actions
+export const SET_REPLYING_TO = "SET_REPLYING_TO";
+export const CLEAR_REPLYING_TO = "CLEAR_REPLYING_TO";

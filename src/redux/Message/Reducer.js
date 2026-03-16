@@ -6,6 +6,8 @@ import {
   GET_CHAT_MESSAGES_SUCCESS,
   GET_CHAT_MESSAGES_ERROR,
   GET_MESSAGES_SINCE_SUCCESS,
+  DELETE_MESSAGE_SUCCESS,
+  DELETE_MESSAGE_FOR_ME_SUCCESS,
   SET_MESSAGE_LOADING,
   CLEAR_MESSAGE_ERROR,
   SET_MESSAGE_DRAFT,
@@ -20,6 +22,8 @@ import {
   UPLOAD_FILE_ERROR,
   ADD_OPTIMISTIC_MESSAGE,
   MARK_MESSAGE_FAILED,
+  SET_REPLYING_TO,
+  CLEAR_REPLYING_TO,
 } from "./ActionType";
 
 const initialState = {
@@ -30,6 +34,7 @@ const initialState = {
   sendingMessage: false,
   uploadingFile: false,
   uploadProgress: 0,
+  replyingTo: null,
   error: null,
   searchResults: {},
   messageCounts: {},
@@ -230,6 +235,36 @@ const messageReducer = (state = initialState, action) => {
       return { ...state, messagesByChat: updatedMessagesByChat };
     }
 
+    // Delete message (for everyone) - local immediate removal
+    case DELETE_MESSAGE_SUCCESS: {
+      const delId = action.payload;
+      const delUpdated = Object.keys(state.messagesByChat).reduce((acc, cid) => {
+        acc[cid] = {
+          ...state.messagesByChat[cid],
+          messages: (state.messagesByChat[cid]?.messages || []).filter(
+            (msg) => msg.id !== delId,
+          ),
+        };
+        return acc;
+      }, {});
+      return { ...state, messagesByChat: delUpdated };
+    }
+
+    // Delete for me - only remove from local store, no broadcast
+    case DELETE_MESSAGE_FOR_ME_SUCCESS: {
+      const delForMeId = action.payload;
+      const delForMeUpdated = Object.keys(state.messagesByChat).reduce((acc, cid) => {
+        acc[cid] = {
+          ...state.messagesByChat[cid],
+          messages: (state.messagesByChat[cid]?.messages || []).filter(
+            (msg) => msg.id !== delForMeId,
+          ),
+        };
+        return acc;
+      }, {});
+      return { ...state, messagesByChat: delForMeUpdated };
+    }
+
     // ===== FILE UPLOAD =====
 
     case UPLOAD_FILE:
@@ -290,6 +325,12 @@ const messageReducer = (state = initialState, action) => {
     case CLEAR_MESSAGE_ERROR:
       return { ...state, error: null };
 
+    case SET_REPLYING_TO:
+      return { ...state, replyingTo: action.payload };
+
+    case CLEAR_REPLYING_TO:
+      return { ...state, replyingTo: null };
+
     default:
       return state;
   }
@@ -299,7 +340,7 @@ const updateMessageInArray = (messages, updatedMessage) => {
   const index = messages.findIndex((m) => m.id === updatedMessage.id);
   if (index >= 0) {
     const newMessages = [...messages];
-    newMessages[index] = updatedMessage;
+    newMessages[index] = { ...newMessages[index], ...updatedMessage };
     return newMessages;
   }
   return [...messages, updatedMessage];

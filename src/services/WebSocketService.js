@@ -23,7 +23,7 @@ class WebSocketService {
     this.currentChatId = null;
   }
 
-  connect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate, userId) {
+  connect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate, userId, onMessageUpdate) {
   return new Promise((resolve, reject) => {
     try {
       const wsUrl = this.getWebSocketUrl(token);
@@ -56,7 +56,8 @@ class WebSocketService {
             this.setupSubscriptions(
               onMessageReceived,
               onTypingUpdate,
-              onPresenceUpdate
+              onPresenceUpdate,
+              onMessageUpdate
             );
           }, 100);
 
@@ -75,7 +76,8 @@ class WebSocketService {
             token,
             onMessageReceived,
             onTypingUpdate,
-            onPresenceUpdate
+            onPresenceUpdate,
+            onMessageUpdate
           );
         },
 
@@ -94,7 +96,7 @@ class WebSocketService {
   });
 }
 
-  setupSubscriptions(onMessageReceived, onTypingUpdate, onPresenceUpdate) {
+  setupSubscriptions(onMessageReceived, onTypingUpdate, onPresenceUpdate, onMessageUpdate) {
     if (!this.client || !this.connected) {
       console.warn("Cannot setup subscriptions - client not ready");
       return;
@@ -137,16 +139,30 @@ class WebSocketService {
         }
       );
 
+      const messageUpdateSubscription = this.client.subscribe(
+        `/topic/user/${this.userId}/message-updates`,
+        (message) => {
+          try {
+            const updateData = JSON.parse(message.body);
+            if (onMessageUpdate) onMessageUpdate(updateData);
+          } catch (error) {
+            console.error("Error parsing message update:", error);
+          }
+        }
+      );
+
       this.subscriptions.set("personal", personalSubscription);
       this.subscriptions.set("typing", typingSubscription);
       this.subscriptions.set("presence", presenceSubscription);
+      this.subscriptions.set("messageUpdate", messageUpdateSubscription);
     } catch (error) {
       console.error("Error setting up subscriptions:", error);
       setTimeout(() => {
         this.setupSubscriptions(
           onMessageReceived,
           onTypingUpdate,
-          onPresenceUpdate
+          onPresenceUpdate,
+          onMessageUpdate
         );
       }, 500);
     }
@@ -207,7 +223,7 @@ class WebSocketService {
     }
   }
 
-  sendChatMessage(chatId, content, messageType = "TEXT", clientMessageId) {
+  sendChatMessage(chatId, content, messageType = "TEXT", clientMessageId, replyToId) {
     const token = localStorage.getItem("token");
     return this.sendMessage("/app/message.send", {
       chatId,
@@ -215,6 +231,7 @@ class WebSocketService {
       messageType,
       token: token,
       clientMessageId,
+      replyToId: replyToId || null,
     });
   }
 
@@ -231,7 +248,7 @@ class WebSocketService {
     });
   }
 
-  handleReconnect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate) {
+  handleReconnect(token, onMessageReceived, onTypingUpdate, onPresenceUpdate, onMessageUpdate) {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("Max reconnection attempts reached");
       return;
@@ -244,7 +261,9 @@ class WebSocketService {
         token,
         onMessageReceived,
         onTypingUpdate,
-        onPresenceUpdate
+        onPresenceUpdate,
+        this.userId,
+        onMessageUpdate
       ).catch((error) => {
         console.error("Reconnection failed:", error);
       });

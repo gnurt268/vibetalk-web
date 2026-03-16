@@ -5,7 +5,6 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
   const store = useSelector((store) => store);
   const currentUser = store.auth?.user;
 
-  // Lấy messages từ Redux store (messagesByChat) thay vì chat.messages
   const chatMessages =
     store.message?.messagesByChat?.[chat?.id]?.messages || [];
 
@@ -40,13 +39,11 @@ const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
   };
 
   const getLastMessage = () => {
-    // Ưu tiên 1: messages từ Redux store (đã load + cập nhật realtime)
     if (chatMessages.length > 0) {
       const lastMsg = chatMessages[chatMessages.length - 1];
       return formatMessage(lastMsg.content, lastMsg.createdAt, lastMsg.sender?.id === currentUser?.id, lastMsg.messageType);
     }
 
-    // Ưu tiên 2: _lastMessage từ API /summaries (khi chưa click vào chat)
     if (chat._lastMessage) {
       return formatMessage(
         chat._lastMessage.content,

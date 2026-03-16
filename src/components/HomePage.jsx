@@ -13,6 +13,7 @@ import ChatCard from "./ChatCard/ChatCard";
 import MessageCard from "./MessageCard/MessageCard";
 import { ImAttachment } from "react-icons/im";
 import { IoSend, IoClose } from "react-icons/io5";
+import EmojiPicker from "emoji-picker-react";
 import "./HomePage.css";
 import { useNavigate } from "react-router-dom";
 import Profile from "./Profile/Profile";
@@ -22,7 +23,12 @@ import CreateGroup from "./GroupChat/CreateGroup";
 import StartNewChat from "./Chat/StartNewChat";
 import { logout } from "../redux/Auth/Action";
 import { useDispatch, useSelector } from "react-redux";
-import { getUserChats, searchChats, setActiveChat, clearUnreadCount } from "../redux/Chat/Action";
+import {
+  getUserChats,
+  searchChats,
+  setActiveChat,
+  clearUnreadCount,
+} from "../redux/Chat/Action";
 import useWebSocket from "../hooks/useWebSocket";
 
 import {
@@ -31,6 +37,8 @@ import {
   setMessageDraft,
   markChatAsRead,
   uploadAndSendFile,
+  setReplyingTo,
+  clearReplyingTo,
 } from "../redux/Message/Action";
 
 import {
@@ -57,6 +65,7 @@ const HomePage = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -65,6 +74,7 @@ const HomePage = () => {
   const textareaRef = useRef(null);
   const inputContainerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
 
   const store = useSelector((store) => store);
   const { auth } = store;
@@ -87,11 +97,12 @@ const HomePage = () => {
   const isLoadingMessages = message?.messageLoading;
   const isSendingMessage = message?.sendingMessage;
   const isUploadingFile = message?.uploadingFile;
+  const replyingTo = message?.replyingTo;
   const hasMore = currentChat?.id
-    ? message?.messagesByChat?.[currentChat.id]?.hasMore ?? true
+    ? (message?.messagesByChat?.[currentChat.id]?.hasMore ?? true)
     : false;
   const currentPage = currentChat?.id
-    ? message?.messagesByChat?.[currentChat.id]?.page ?? 0
+    ? (message?.messagesByChat?.[currentChat.id]?.page ?? 0)
     : 0;
 
   const open = Boolean(anchorEl);
@@ -114,6 +125,7 @@ const HomePage = () => {
       dispatch(getChatMessages(currentChat.id));
       dispatch(markChatAsRead(currentChat.id));
       dispatch(clearUnreadCount(currentChat.id));
+      dispatch(clearReplyingTo());
     }
   }, [currentChat?.id, dispatch]);
 
@@ -126,7 +138,6 @@ const HomePage = () => {
   const prevMessagesLengthRef = useRef(0);
   const shouldScrollRef = useRef(true);
 
-  // Scroll xuống cuối khi mở chat mới
   useEffect(() => {
     if (currentChat?.id) {
       shouldScrollRef.current = true;
@@ -140,17 +151,18 @@ const HomePage = () => {
     const newLength = messages.length;
 
     if (shouldScrollRef.current) {
-      // Mở chat lần đầu → scroll xuống cuối sau khi render
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
         shouldScrollRef.current = false;
       }, 100);
     } else if (newLength > prevLength && prevLength > 0) {
-      // Có tin mới (append ở cuối) → kiểm tra nếu đang ở gần cuối thì scroll
       const container = messagesContainerRef.current;
       if (container) {
         const isNearBottom =
-          container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+          container.scrollHeight -
+            container.scrollTop -
+            container.clientHeight <
+          150;
         if (isNearBottom) {
           setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -158,7 +170,6 @@ const HomePage = () => {
         }
       }
     }
-    // Load tin cũ (prepend) → không scroll, handleLoadMore đã giữ vị trí
 
     prevMessagesLengthRef.current = newLength;
   }, [messages.length]);
@@ -194,6 +205,47 @@ const HomePage = () => {
     currentUser?.id,
     markMessageAsRead,
   ]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
+
+  const handleEmojiClick = (emojiData) => {
+    const emoji = emojiData.emoji;
+    const textarea = textareaRef.current;
+
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newContent =
+        content.substring(0, start) + emoji + content.substring(end);
+      setContent(newContent);
+      if (currentChat) {
+        dispatch(setMessageDraft(currentChat.id, newContent));
+      }
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+        textarea.focus();
+      }, 0);
+    } else {
+      const newContent = content + emoji;
+      setContent(newContent);
+      if (currentChat) {
+        dispatch(setMessageDraft(currentChat.id, newContent));
+      }
+    }
+  };
 
   const handleTyping = useCallback(() => {
     if (!currentChat?.id || !wsConnected) return;
@@ -232,7 +284,6 @@ const HomePage = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    // Lưu scroll position trước khi load
     const prevScrollHeight = container.scrollHeight;
 
     setIsLoadingMore(true);
@@ -242,7 +293,6 @@ const HomePage = () => {
       setIsLoadingMore(false);
     }
 
-    // Giữ vị trí scroll sau khi prepend tin cũ
     requestAnimationFrame(() => {
       const newScrollHeight = container.scrollHeight;
       container.scrollTop = newScrollHeight - prevScrollHeight;
@@ -252,12 +302,11 @@ const HomePage = () => {
   const handleMessagesScroll = useCallback(
     (e) => {
       const { scrollTop } = e.target;
-      // Khi scroll lên gần đầu (< 50px) → load thêm tin cũ
       if (scrollTop < 50 && hasMore && !isLoadingMore) {
         handleLoadMore();
       }
     },
-    [hasMore, isLoadingMore, handleLoadMore]
+    [hasMore, isLoadingMore, handleLoadMore],
   );
 
   const handleClick = (event) => {
@@ -285,6 +334,7 @@ const HomePage = () => {
 
     const clientMessageId = crypto.randomUUID();
     const messageText = content.trim();
+    const currentReplyTo = replyingTo;
 
     // Stop typing indicator
     if (isTyping) {
@@ -296,7 +346,6 @@ const HomePage = () => {
       }
     }
 
-    // 1. Optimistic: hiện message ngay
     dispatch({
       type: ADD_OPTIMISTIC_MESSAGE,
       payload: {
@@ -312,31 +361,47 @@ const HomePage = () => {
           urlAvatar: currentUser.urlAvatar,
         },
         chat: { id: currentChat.id },
+        replyTo: currentReplyTo
+          ? {
+              id: currentReplyTo.id,
+              content: currentReplyTo.content,
+              sender: currentReplyTo.sender,
+              messageType: currentReplyTo.messageType,
+            }
+          : null,
       },
     });
 
-    // Clear input ngay
     setContent("");
     dispatch(setMessageDraft(currentChat.id, ""));
+    if (currentReplyTo) dispatch(clearReplyingTo());
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       setInputHeight(100);
     }
     setTimeout(() => scrollToBottom(), 100);
 
-    // 2. Gửi qua WS hoặc HTTP
     try {
       let success = false;
       if (wsConnected) {
-        success = sendWebSocketMessage(currentChat.id, messageText, "TEXT", clientMessageId);
+        success = sendWebSocketMessage(
+          currentChat.id,
+          messageText,
+          "TEXT",
+          clientMessageId,
+          currentReplyTo?.id,
+        );
       }
       if (!success) {
-        await dispatch(sendMessage({
-          content: messageText,
-          chatId: currentChat.id,
-          messageType: "TEXT",
-          clientMessageId,
-        }));
+        await dispatch(
+          sendMessage({
+            content: messageText,
+            chatId: currentChat.id,
+            messageType: "TEXT",
+            clientMessageId,
+            replyToId: currentReplyTo?.id,
+          }),
+        );
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -367,7 +432,7 @@ const HomePage = () => {
 
   const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
   const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-  const MAX_FILE_SIZE = 25 * 1024 * 1024;  // 25MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -393,7 +458,6 @@ const HomePage = () => {
       setFilePreview(null);
     }
 
-    // Reset input để có thể chọn lại cùng file
     e.target.value = "";
   };
 
@@ -410,12 +474,17 @@ const HomePage = () => {
     const isImage = IMAGE_TYPES.includes(selectedFile.type);
     const caption = content.trim() || "";
 
-    // 1. Optimistic: hiện message ngay với preview
     dispatch({
       type: ADD_OPTIMISTIC_MESSAGE,
       payload: {
         clientMessageId,
-        content: (filePreview || "") + "|" + selectedFile.name + "|" + selectedFile.size + (caption ? "|" + caption : ""),
+        content:
+          (filePreview || "") +
+          "|" +
+          selectedFile.name +
+          "|" +
+          selectedFile.size +
+          (caption ? "|" + caption : ""),
         messageType: isImage ? "IMAGE" : "FILE",
         createdAt: new Date().toISOString(),
         status: "UPLOADING",
@@ -429,7 +498,6 @@ const HomePage = () => {
       },
     });
 
-    // Clear UI ngay
     const fileToUpload = selectedFile;
     const captionToSend = caption || undefined;
     handleFileRemove();
@@ -437,14 +505,18 @@ const HomePage = () => {
     dispatch(setMessageDraft(currentChat.id, ""));
     setTimeout(() => scrollToBottom(), 100);
 
-    // 2. Upload
     try {
       await dispatch(
-        uploadAndSendFile(fileToUpload, currentChat.id, captionToSend, (progress) => {
-          setUploadProgress(progress);
-        }, clientMessageId)
+        uploadAndSendFile(
+          fileToUpload,
+          currentChat.id,
+          captionToSend,
+          (progress) => {
+            setUploadProgress(progress);
+          },
+          clientMessageId,
+        ),
       );
-      // WebSocket broadcast sẽ replace optimistic message qua NEW_MESSAGE_RECEIVED
     } catch (error) {
       console.error("Error uploading file:", error);
       dispatch({
@@ -785,16 +857,20 @@ const HomePage = () => {
                 bottom: `${inputHeight}px`,
               }}
             >
-              <div className="flex flex-col space-y-2 pb-4">
+              <div className="flex flex-col items-start space-y-2 pb-4">
                 {/* Loading more indicator */}
                 {isLoadingMore && (
                   <div className="flex justify-center items-center py-3">
-                    <div className="text-sm text-gray-500">Loading older messages...</div>
+                    <div className="text-sm text-gray-500">
+                      Loading older messages...
+                    </div>
                   </div>
                 )}
                 {!hasMore && messages.length > 0 && (
                   <div className="flex justify-center items-center py-3">
-                    <div className="text-xs text-gray-400">Beginning of conversation</div>
+                    <div className="text-xs text-gray-400">
+                      Beginning of conversation
+                    </div>
                   </div>
                 )}
                 {isLoadingMessages ? (
@@ -804,10 +880,15 @@ const HomePage = () => {
                 ) : messages.length > 0 ? (
                   messages.map((msg, index) => (
                     <MessageCard
-                      key={msg.id}
+                      key={msg.id || msg.clientMessageId}
                       message={msg}
-                      isReqUserMessage={msg.sender.id === currentUser?.id}
+                      messageDomId={`msg-${msg.id}`}
+                      isReqUserMessage={msg.sender?.id === currentUser?.id}
                       content={msg.content}
+                      onReply={(m) => {
+                        dispatch(setReplyingTo(m));
+                        textareaRef.current?.focus();
+                      }}
                     />
                   ))
                 ) : (
@@ -829,6 +910,32 @@ const HomePage = () => {
               className="absolute bottom-0 left-0 right-0 bg-[#f0f2f5] px-3 py-2 flex flex-col"
               style={{ minHeight: `${inputHeight}px` }}
             >
+              {/* Reply preview bar */}
+              {replyingTo && (
+                <div className="mb-2 p-2 bg-white rounded-lg border-l-4 border-green-500 flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-green-600">
+                      {replyingTo.sender?.id === currentUser?.id
+                        ? "You"
+                        : replyingTo.sender?.fullName}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {replyingTo.messageType === "IMAGE"
+                        ? "📷 Photo"
+                        : replyingTo.messageType === "FILE"
+                          ? "📎 File"
+                          : replyingTo.content}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => dispatch(clearReplyingTo())}
+                    className="p-1 hover:bg-gray-100 rounded-full ml-2 flex-shrink-0"
+                  >
+                    <IoClose className="text-lg text-gray-500" />
+                  </button>
+                </div>
+              )}
+
               {/* File preview */}
               {selectedFile && (
                 <div className="mb-2 p-2 bg-white rounded-lg border border-gray-200 flex items-center space-x-3">
@@ -871,7 +978,29 @@ const HomePage = () => {
 
               {/* Input row */}
               <div className="flex items-end space-x-3">
-                <BsEmojiSmile className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700" />
+                <div className="relative" ref={emojiPickerRef}>
+                  <BsEmojiSmile
+                    className={`text-2xl cursor-pointer transition-colors ${
+                      showEmojiPicker
+                        ? "text-green-600"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                    onClick={() => setShowEmojiPicker((prev) => !prev)}
+                  />
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-10 left-0 z-50 shadow-xl rounded-lg">
+                      <EmojiPicker
+                        onEmojiClick={handleEmojiClick}
+                        width={320}
+                        height={400}
+                        searchPlaceHolder="Search emoji..."
+                        previewConfig={{ showPreview: false }}
+                        skinTonesDisabled
+                        lazyLoadEmojis
+                      />
+                    </div>
+                  )}
+                </div>
 
                 {/* Hidden file input */}
                 <input
@@ -890,7 +1019,9 @@ const HomePage = () => {
                   <textarea
                     ref={textareaRef}
                     className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
-                    placeholder={selectedFile ? "Add a caption..." : "Type a message..."}
+                    placeholder={
+                      selectedFile ? "Add a caption..." : "Type a message..."
+                    }
                     value={content}
                     onChange={(e) => handleContentChange(e.target.value)}
                     onKeyPress={(e) => {
@@ -918,7 +1049,9 @@ const HomePage = () => {
                 </div>
 
                 <button
-                  onClick={selectedFile ? handleSendFile : handleCreateNewMessage}
+                  onClick={
+                    selectedFile ? handleSendFile : handleCreateNewMessage
+                  }
                   disabled={
                     selectedFile
                       ? isUploadingFile
