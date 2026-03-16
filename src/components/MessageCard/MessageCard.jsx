@@ -108,7 +108,7 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
   const handleDeleteForMe = async () => {
     if (
       window.confirm(
-        "Are you sure you want to delete this message for yourself?",
+        "Are you sure you want to delete this message for yourself?"
       )
     ) {
       try {
@@ -162,7 +162,7 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
 
                 const choice = prompt(
                   "Choose option:\n" +
-                    options.map((opt, i) => `${i + 1}. ${opt}`).join("\n"),
+                    options.map((opt, i) => `${i + 1}. ${opt}`).join("\n")
                 );
 
                 if (choice === "1" && isOwnMessage) {
@@ -330,7 +330,7 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
 
       {/* Message metadata */}
       <div
-        className={`flex items-center justify-end mt-1 space-x-1 text-xs text-gray-500 ${
+        className={`flex items-center mt-1 space-x-1 text-xs text-gray-500 ${
           isOwnMessage ? "justify-end" : "justify-start"
         }`}
       >
@@ -338,21 +338,33 @@ const MessageCard = ({ message, isRequestUserMessage }) => {
 
         {/* Message status for own messages */}
         {isOwnMessage && (
-          <div className="flex items-center space-x-1">
-            {/* Read status indicators */}
-            <span className="text-gray-400">
-              {message.readStatuses && message.readStatuses.length > 0
-                ? "✓✓"
-                : "✓"}
-            </span>
-          </div>
+          <span>
+            {message.status === "SENDING" || message.status === "UPLOADING" ? (
+              <span className="text-gray-400" title="Sending...">⏳</span>
+            ) : message.status === "FAILED" ? (
+              <span className="text-red-500" title="Failed to send">✗</span>
+            ) : message.readStatuses && message.readStatuses.length > 0 ? (
+              <span className="text-blue-500" title="Read">✓✓</span>
+            ) : (
+              <span className="text-gray-400" title="Sent">✓</span>
+            )}
+          </span>
         )}
       </div>
 
-      {/* Message type indicator (for future file/image messages) */}
-      {message.messageType && message.messageType !== "TEXT" && (
-        <div className="text-xs text-gray-400 mt-1">
-          📎 {message.messageType}
+      {/* Retry button for failed messages */}
+      {message.status === "FAILED" && isOwnMessage && (
+        <div className="mt-1">
+          <span className="text-xs text-red-500">Failed to send. </span>
+          <button
+            className="text-xs text-blue-500 hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              // TODO: implement retry
+            }}
+          >
+            Retry
+          </button>
         </div>
       )}
     </div>

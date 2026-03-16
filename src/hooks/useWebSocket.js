@@ -37,6 +37,7 @@ const useWebSocket = () => {
         content: messageData.content,
         messageType: messageData.messageType || "TEXT",
         createdAt: messageData.timestamp || new Date().toISOString(),
+        clientMessageId: messageData.clientMessageId || null,
         sender: {
           id: messageData.senderId,
           username: messageData.senderUsername,
@@ -141,12 +142,12 @@ const useWebSocket = () => {
   }, []);
 
 
-  const sendMessage = useCallback((chatId, content, messageType = "TEXT") => {
+  const sendMessage = useCallback((chatId, content, messageType = "TEXT", clientMessageId) => {
     if (!webSocketService.isConnected()) {
       console.warn("WebSocket not connected, cannot send message");
       return false;
     }
-    return webSocketService.sendChatMessage(chatId, content, messageType);
+    return webSocketService.sendChatMessage(chatId, content, messageType, clientMessageId);
   }, []);
 
   const sendTypingIndicator = useCallback((chatId, isTyping) => {

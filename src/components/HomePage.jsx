@@ -22,12 +22,7 @@ import CreateGroup from "./GroupChat/CreateGroup";
 import StartNewChat from "./Chat/StartNewChat";
 import { logout } from "../redux/Auth/Action";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  getUserChats,
-  searchChats,
-  setActiveChat,
-  clearUnreadCount,
-} from "../redux/Chat/Action";
+import { getUserChats, searchChats, setActiveChat, clearUnreadCount } from "../redux/Chat/Action";
 import useWebSocket from "../hooks/useWebSocket";
 
 import {
@@ -37,6 +32,11 @@ import {
   markChatAsRead,
   uploadAndSendFile,
 } from "../redux/Message/Action";
+
+import {
+  ADD_OPTIMISTIC_MESSAGE,
+  MARK_MESSAGE_FAILED,
+} from "../redux/Message/ActionType";
 
 import {
   selectMessagesByChat,
@@ -88,10 +88,10 @@ const HomePage = () => {
   const isSendingMessage = message?.sendingMessage;
   const isUploadingFile = message?.uploadingFile;
   const hasMore = currentChat?.id
-    ? (message?.messagesByChat?.[currentChat.id]?.hasMore ?? true)
+    ? message?.messagesByChat?.[currentChat.id]?.hasMore ?? true
     : false;
   const currentPage = currentChat?.id
-    ? (message?.messagesByChat?.[currentChat.id]?.page ?? 0)
+    ? message?.messagesByChat?.[currentChat.id]?.page ?? 0
     : 0;
 
   const open = Boolean(anchorEl);
@@ -126,6 +126,7 @@ const HomePage = () => {
   const prevMessagesLengthRef = useRef(0);
   const shouldScrollRef = useRef(true);
 
+  // Scroll xuống cuối khi mở chat mới
   useEffect(() => {
     if (currentChat?.id) {
       shouldScrollRef.current = true;
@@ -139,18 +140,17 @@ const HomePage = () => {
     const newLength = messages.length;
 
     if (shouldScrollRef.current) {
+      // Mở chat lần đầu → scroll xuống cuối sau khi render
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
         shouldScrollRef.current = false;
       }, 100);
     } else if (newLength > prevLength && prevLength > 0) {
+      // Có tin mới (append ở cuối) → kiểm tra nếu đang ở gần cuối thì scroll
       const container = messagesContainerRef.current;
       if (container) {
         const isNearBottom =
-          container.scrollHeight -
-            container.scrollTop -
-            container.clientHeight <
-          150;
+          container.scrollHeight - container.scrollTop - container.clientHeight < 150;
         if (isNearBottom) {
           setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -158,6 +158,7 @@ const HomePage = () => {
         }
       }
     }
+    // Load tin cũ (prepend) → không scroll, handleLoadMore đã giữ vị trí
 
     prevMessagesLengthRef.current = newLength;
   }, [messages.length]);
@@ -231,6 +232,7 @@ const HomePage = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
+    // Lưu scroll position trước khi load
     const prevScrollHeight = container.scrollHeight;
 
     setIsLoadingMore(true);
@@ -240,6 +242,7 @@ const HomePage = () => {
       setIsLoadingMore(false);
     }
 
+    // Giữ vị trí scroll sau khi prepend tin cũ
     requestAnimationFrame(() => {
       const newScrollHeight = container.scrollHeight;
       container.scrollTop = newScrollHeight - prevScrollHeight;
@@ -249,11 +252,12 @@ const HomePage = () => {
   const handleMessagesScroll = useCallback(
     (e) => {
       const { scrollTop } = e.target;
+      // Khi scroll lên gần đầu (< 50px) → load thêm tin cũ
       if (scrollTop < 50 && hasMore && !isLoadingMore) {
         handleLoadMore();
       }
     },
-    [hasMore, isLoadingMore, handleLoadMore],
+    [hasMore, isLoadingMore, handleLoadMore]
   );
 
   const handleClick = (event) => {
@@ -277,54 +281,69 @@ const HomePage = () => {
   };
 
   const handleCreateNewMessage = async () => {
-    if (!currentChat?.id) {
-      console.error("No chat selected");
-      return;
+    if (!currentChat?.id || !content.trim() || isSendingMessage) return;
+
+    const clientMessageId = crypto.randomUUID();
+    const messageText = content.trim();
+
+    // Stop typing indicator
+    if (isTyping) {
+      setIsTyping(false);
+      sendTypingIndicator(currentChat.id, false);
+      if (typingTimer) {
+        clearTimeout(typingTimer);
+        setTypingTimer(null);
+      }
     }
 
-    if (content.trim() && currentChat && !isSendingMessage) {
-      try {
-        if (isTyping) {
-          setIsTyping(false);
-          sendTypingIndicator(currentChat.id, false);
-          if (typingTimer) {
-            clearTimeout(typingTimer);
-            setTypingTimer(null);
-          }
-        }
+    // 1. Optimistic: hiện message ngay
+    dispatch({
+      type: ADD_OPTIMISTIC_MESSAGE,
+      payload: {
+        clientMessageId,
+        content: messageText,
+        messageType: "TEXT",
+        createdAt: new Date().toISOString(),
+        status: "SENDING",
+        sender: {
+          id: currentUser.id,
+          username: currentUser.username,
+          fullName: currentUser.fullName,
+          urlAvatar: currentUser.urlAvatar,
+        },
+        chat: { id: currentChat.id },
+      },
+    });
 
-        const messageData = {
-          content: content.trim(),
+    // Clear input ngay
+    setContent("");
+    dispatch(setMessageDraft(currentChat.id, ""));
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      setInputHeight(100);
+    }
+    setTimeout(() => scrollToBottom(), 100);
+
+    // 2. Gửi qua WS hoặc HTTP
+    try {
+      let success = false;
+      if (wsConnected) {
+        success = sendWebSocketMessage(currentChat.id, messageText, "TEXT", clientMessageId);
+      }
+      if (!success) {
+        await dispatch(sendMessage({
+          content: messageText,
           chatId: currentChat.id,
           messageType: "TEXT",
-        };
-
-        let success = false;
-
-        if (wsConnected) {
-          success = sendWebSocketMessage(
-            currentChat.id,
-            content.trim(),
-            "TEXT",
-          );
-        }
-
-        if (!success) {
-          await dispatch(sendMessage(messageData));
-        }
-
-        setContent("");
-        dispatch(setMessageDraft(currentChat.id, ""));
-
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto";
-          setInputHeight(100);
-        }
-
-        setTimeout(() => scrollToBottom(), 100);
-      } catch (error) {
-        console.error("Error sending message:", error);
+          clientMessageId,
+        }));
       }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      dispatch({
+        type: MARK_MESSAGE_FAILED,
+        payload: { clientMessageId, chatId: currentChat.id },
+      });
     }
   };
 
@@ -348,7 +367,7 @@ const HomePage = () => {
 
   const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
   const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024;  // 25MB
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -374,6 +393,7 @@ const HomePage = () => {
       setFilePreview(null);
     }
 
+    // Reset input để có thể chọn lại cùng file
     e.target.value = "";
   };
 
@@ -386,21 +406,51 @@ const HomePage = () => {
   const handleSendFile = async () => {
     if (!selectedFile || !currentChat?.id || isUploadingFile) return;
 
-    try {
-      const caption = content.trim() || undefined;
-      await dispatch(
-        uploadAndSendFile(selectedFile, currentChat.id, caption, (progress) => {
-          setUploadProgress(progress);
-        }),
-      );
+    const clientMessageId = crypto.randomUUID();
+    const isImage = IMAGE_TYPES.includes(selectedFile.type);
+    const caption = content.trim() || "";
 
-      handleFileRemove();
-      setContent("");
-      dispatch(setMessageDraft(currentChat.id, ""));
-      setTimeout(() => scrollToBottom(), 100);
+    // 1. Optimistic: hiện message ngay với preview
+    dispatch({
+      type: ADD_OPTIMISTIC_MESSAGE,
+      payload: {
+        clientMessageId,
+        content: (filePreview || "") + "|" + selectedFile.name + "|" + selectedFile.size + (caption ? "|" + caption : ""),
+        messageType: isImage ? "IMAGE" : "FILE",
+        createdAt: new Date().toISOString(),
+        status: "UPLOADING",
+        sender: {
+          id: currentUser.id,
+          username: currentUser.username,
+          fullName: currentUser.fullName,
+          urlAvatar: currentUser.urlAvatar,
+        },
+        chat: { id: currentChat.id },
+      },
+    });
+
+    // Clear UI ngay
+    const fileToUpload = selectedFile;
+    const captionToSend = caption || undefined;
+    handleFileRemove();
+    setContent("");
+    dispatch(setMessageDraft(currentChat.id, ""));
+    setTimeout(() => scrollToBottom(), 100);
+
+    // 2. Upload
+    try {
+      await dispatch(
+        uploadAndSendFile(fileToUpload, currentChat.id, captionToSend, (progress) => {
+          setUploadProgress(progress);
+        }, clientMessageId)
+      );
+      // WebSocket broadcast sẽ replace optimistic message qua NEW_MESSAGE_RECEIVED
     } catch (error) {
       console.error("Error uploading file:", error);
-      alert("Failed to upload file. Please try again.");
+      dispatch({
+        type: MARK_MESSAGE_FAILED,
+        payload: { clientMessageId, chatId: currentChat.id },
+      });
     }
   };
 
@@ -739,16 +789,12 @@ const HomePage = () => {
                 {/* Loading more indicator */}
                 {isLoadingMore && (
                   <div className="flex justify-center items-center py-3">
-                    <div className="text-sm text-gray-500">
-                      Loading older messages...
-                    </div>
+                    <div className="text-sm text-gray-500">Loading older messages...</div>
                   </div>
                 )}
                 {!hasMore && messages.length > 0 && (
                   <div className="flex justify-center items-center py-3">
-                    <div className="text-xs text-gray-400">
-                      Beginning of conversation
-                    </div>
+                    <div className="text-xs text-gray-400">Beginning of conversation</div>
                   </div>
                 )}
                 {isLoadingMessages ? (
@@ -844,9 +890,7 @@ const HomePage = () => {
                   <textarea
                     ref={textareaRef}
                     className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
-                    placeholder={
-                      selectedFile ? "Add a caption..." : "Type a message..."
-                    }
+                    placeholder={selectedFile ? "Add a caption..." : "Type a message..."}
                     value={content}
                     onChange={(e) => handleContentChange(e.target.value)}
                     onKeyPress={(e) => {
@@ -874,9 +918,7 @@ const HomePage = () => {
                 </div>
 
                 <button
-                  onClick={
-                    selectedFile ? handleSendFile : handleCreateNewMessage
-                  }
+                  onClick={selectedFile ? handleSendFile : handleCreateNewMessage}
                   disabled={
                     selectedFile
                       ? isUploadingFile

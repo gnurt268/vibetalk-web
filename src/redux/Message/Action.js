@@ -54,6 +54,8 @@ import {
   UPLOAD_FILE,
   UPLOAD_FILE_SUCCESS,
   UPLOAD_FILE_ERROR,
+  ADD_OPTIMISTIC_MESSAGE,
+  MARK_MESSAGE_FAILED,
 } from "./ActionType";
 
 export {
@@ -76,7 +78,7 @@ export const sendMessage = (messageData) => async (dispatch) => {
   try {
     dispatch({ type: SEND_MESSAGE });
 
-    const { content, chatId, messageType = "TEXT" } = messageData;
+    const { content, chatId, messageType = "TEXT", clientMessageId } = messageData;
 
     const response = await api.post(
       "/api/messages/send",
@@ -84,10 +86,11 @@ export const sendMessage = (messageData) => async (dispatch) => {
         content,
         chatId,
         messageType,
+        clientMessageId,
       },
       {
         headers: getAuthHeaders(),
-      },
+      }
     );
 
     dispatch({
@@ -305,7 +308,7 @@ export const forwardMessage = (messageId, targetChatId) => async (dispatch) => {
       {},
       {
         headers: getAuthHeaders(),
-      },
+      }
     );
 
     dispatch({
@@ -363,7 +366,7 @@ export const markChatAsRead = (chatId) => async (dispatch) => {
       {},
       {
         headers: getAuthHeaders(),
-      },
+      }
     );
 
     dispatch({
@@ -515,9 +518,10 @@ export const loadChatMessagesWithStatus =
  * @param {number} chatId
  * @param {string} [caption] - Caption tùy chọn
  * @param {function} [onProgress] - Callback upload progress (0-100)
+ * @param {string} [clientMessageId] - Client-side message ID for optimistic UI
  */
 export const uploadAndSendFile =
-  (file, chatId, caption, onProgress) => async (dispatch) => {
+  (file, chatId, caption, onProgress, clientMessageId) => async (dispatch) => {
     try {
       dispatch({ type: UPLOAD_FILE, payload: { chatId, fileName: file.name } });
 
@@ -527,21 +531,20 @@ export const uploadAndSendFile =
       if (caption) {
         formData.append("caption", caption);
       }
+      if (clientMessageId) {
+        formData.append("clientMessageId", clientMessageId);
+      }
 
-      const response = await fileUploadApi.post(
-        "/api/messages/upload",
-        formData,
-        {
-          onUploadProgress: (progressEvent) => {
-            if (onProgress && progressEvent.total) {
-              const percent = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total,
-              );
-              onProgress(percent);
-            }
-          },
+      const response = await fileUploadApi.post("/api/messages/upload", formData, {
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const percent = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            onProgress(percent);
+          }
         },
-      );
+      });
 
       dispatch({
         type: UPLOAD_FILE_SUCCESS,

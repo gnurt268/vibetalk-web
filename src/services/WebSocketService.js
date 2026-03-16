@@ -207,13 +207,14 @@ class WebSocketService {
     }
   }
 
-  sendChatMessage(chatId, content, messageType = "TEXT") {
+  sendChatMessage(chatId, content, messageType = "TEXT", clientMessageId) {
     const token = localStorage.getItem("token");
     return this.sendMessage("/app/message.send", {
       chatId,
       content,
       messageType,
       token: token,
+      clientMessageId,
     });
   }
 
