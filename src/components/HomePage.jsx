@@ -428,8 +428,7 @@ const HomePage = () => {
       dispatch(setActiveChat(null));
       dispatch(getUserChats());
     } catch (error) {
-      console.error("Delete chat error:", error);
-      alert(error.response?.data?.message || "Failed to delete chat");
+      alert("Failed to delete chat");
     }
     setShowChatMenu(false);
   };

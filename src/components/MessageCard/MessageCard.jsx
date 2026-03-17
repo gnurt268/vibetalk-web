@@ -250,7 +250,8 @@ const MessageCard = ({
         }`}
       >
         <BsThreeDotsVertical
-          className="text-gray-400 hover:text-gray-600 cursor-pointer text-sm p-1"
+          className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
+          size={20}
           onClick={(e) => {
             e.stopPropagation();
             setShowDropdown((prev) => !prev);
@@ -325,7 +326,7 @@ const MessageCard = ({
   return (
     <div
       id={messageDomId}
-      className={`flex items-start max-w-[75%] ${isOwnMessage ? "self-end flex-row-reverse" : "self-start flex-row"}`}
+      className={`flex items-center gap-1 max-w-[75%] ${isOwnMessage ? "self-end flex-row-reverse" : "self-start flex-row"}`}
       onMouseEnter={() => setShowOptions(true)}
       onMouseLeave={() => {
         if (!isEditing && !showDropdown) setShowOptions(false);
@@ -333,7 +334,7 @@ const MessageCard = ({
     >
       {/* Message bubble */}
       <div
-        className={`py-2 px-3 rounded-lg ${messageStyle} shadow-sm relative`}
+        className={`py-2 px-3 rounded-lg ${messageStyle} shadow-sm relative min-w-[80px] max-w-full`}
       >
         {/* Sender name for group chats (only for received messages) */}
         {!isOwnMessage && message.sender && (
