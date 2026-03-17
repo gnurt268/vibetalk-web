@@ -16,7 +16,7 @@ const Login = () => {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -69,7 +69,9 @@ const Login = () => {
     } catch (error) {
       setErrors({
         submit:
-          error.response?.data?.message || "Login failed. Please try again.",
+          error.response?.data?.error ||
+          error.response?.data?.message ||
+          "Login failed. Please try again.",
       });
     } finally {
       setIsLoading(false);

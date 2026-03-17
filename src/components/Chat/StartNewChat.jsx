@@ -11,7 +11,8 @@ const StartNewChat = ({ onBack }) => {
   const [isSearching, setIsSearching] = useState(false);
 
   const dispatch = useDispatch();
-  const { auth, chat } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
+  const chat = useSelector((store) => store.chat);
   const currentUser = auth?.user;
   const isCreatingChat = chat?.isCreatingChat;
   useEffect(() => {
@@ -36,10 +37,10 @@ const StartNewChat = ({ onBack }) => {
     try {
       const token = localStorage.getItem("token");
       const results = await dispatch(
-        searchUser({ keyword: searchQuery }, token)
+        searchUser({ keyword: searchQuery }, token),
       );
       const filteredResults = results.filter(
-        (user) => user.id !== currentUser?.id
+        (user) => user.id !== currentUser?.id,
       );
       setSearchResults(filteredResults);
     } catch (error) {

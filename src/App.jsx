@@ -11,14 +11,14 @@ import ForgotPassword from "./components/auth/ForgotPassword.jsx";
 import ResetPassword from "./components/auth/ResetPassword.jsx";
 
 const ProtectedRoute = ({ children }) => {
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
   const token = localStorage.getItem("token");
 
   return auth?.user || token ? children : <Navigate to="/login" replace />;
 };
 
 const PublicRoute = ({ children }) => {
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
   const token = localStorage.getItem("token");
 
   return auth?.user || token ? <Navigate to="/" replace /> : children;
@@ -26,7 +26,7 @@ const PublicRoute = ({ children }) => {
 
 function App() {
   const dispatch = useDispatch();
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
 
   useEffect(() => {
     const initializeUser = async () => {

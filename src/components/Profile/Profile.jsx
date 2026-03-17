@@ -13,7 +13,7 @@ import ChangePassword from "./ChangePassword";
 
 const Profile = ({ onBack }) => {
   const dispatch = useDispatch();
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
   const currentUser = auth?.user;
 
   const [currentView, setCurrentView] = useState("profile");
@@ -22,7 +22,7 @@ const Profile = ({ onBack }) => {
   });
   const [fullName, setFullName] = useState(currentUser?.fullName || "");
   const [avatarPreview, setAvatarPreview] = useState(
-    currentUser?.urlAvatar || null
+    currentUser?.urlAvatar || null,
   );
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUpdatingName, setIsUpdatingName] = useState(false);
@@ -193,7 +193,7 @@ const Profile = ({ onBack }) => {
 
       const response = await fileUploadApi.post(
         API_ENDPOINTS.USERS.UPLOAD_AVATAR,
-        formData
+        formData,
       );
 
       const imageUrl = response.data.imageUrl;

@@ -1,6 +1,7 @@
 import axios from "axios";
 
-export const BASE_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+export const BASE_API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:8080";
 
 export const api = axios.create({
   baseURL: BASE_API_URL,
@@ -16,16 +17,16 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     config.headers["ngrok-skip-browser-warning"] = "true";
     config.headers["ngrok-skip-browser-warning"] = "any";
     config.headers["Accept"] = "application/json";
-    
+
     return config;
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 api.interceptors.response.use(
@@ -52,7 +53,7 @@ api.interceptors.response.use(
         case 500:
           console.error(
             "Server error:",
-            data?.message || "Internal server error"
+            data?.message || "Internal server error",
           );
           break;
         default:
@@ -65,7 +66,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export const fileUploadApi = axios.create({
@@ -87,7 +88,7 @@ fileUploadApi.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 fileUploadApi.interceptors.response.use(
@@ -98,7 +99,7 @@ fileUploadApi.interceptors.response.use(
       window.location.href = "/login";
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export const API_ENDPOINTS = {
@@ -155,8 +156,9 @@ export const apiHelpers = {
 
   handleApiError: (error) => {
     if (error.response) {
-      const message = error.response.data?.message || error.response.statusText;
-      return { message, status: error.response.status };
+      const data = error.response.data;
+      const message = data?.error || data?.message || error.response.statusText;
+      return { message, status: error.response.status, error: data?.error };
     } else if (error.request) {
       return {
         message: "Network error. Please check your connection.",

@@ -14,7 +14,7 @@ const CreateGroup = ({ onBack, onGroupCreated }) => {
   const [isSearching, setIsSearching] = useState(false);
 
   const dispatch = useDispatch();
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
   const currentUser = auth?.user;
   useEffect(() => {
     const delayedSearch = setTimeout(() => {
@@ -38,12 +38,12 @@ const CreateGroup = ({ onBack, onGroupCreated }) => {
     try {
       const token = localStorage.getItem("token");
       const results = await dispatch(
-        searchUser({ keyword: searchQuery }, token)
+        searchUser({ keyword: searchQuery }, token),
       );
       const filteredResults = results.filter(
         (user) =>
           user.id !== currentUser?.id &&
-          !Array.from(groupMembers).some((member) => member.id === user.id)
+          !Array.from(groupMembers).some((member) => member.id === user.id),
       );
 
       setSearchResults(filteredResults);

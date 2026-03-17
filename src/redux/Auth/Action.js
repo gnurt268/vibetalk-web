@@ -14,6 +14,9 @@ import {
   UPLOAD_AVATAR,
 } from "./ActionType";
 
+/**
+ * Generate E2EE key pair
+ */
 const setupE2EEKeys = async (token) => {
   try {
     if (!cryptoService.hasKeyPair()) {
@@ -208,7 +211,6 @@ export const uploadAvatarBase64 = (base64Image, token) => async (dispatch) => {
 export const logout = () => async (dispatch) => {
   try {
     localStorage.removeItem("token");
-    cryptoService.clearKeys();
     dispatch({ type: LOGOUT, payload: null });
   } catch (error) {
     console.error("error logout: ", error);

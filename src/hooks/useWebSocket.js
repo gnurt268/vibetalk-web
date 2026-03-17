@@ -8,11 +8,15 @@ import {
   MESSAGE_UPDATED,
   MESSAGE_DELETED,
 } from "../redux/Message/ActionType";
-import { INCREMENT_UNREAD_COUNT, UPDATE_CHAT_LAST_MESSAGE } from "../redux/Chat/ActionType";
+import {
+  INCREMENT_UNREAD_COUNT,
+  UPDATE_CHAT_LAST_MESSAGE,
+} from "../redux/Chat/ActionType";
 
 const useWebSocket = () => {
   const dispatch = useDispatch();
-  const { auth, chat } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
+  const chat = useSelector((store) => store.chat);
   const connectedRef = useRef(false);
   const currentChatSubscriptionRef = useRef(null);
   const activeChatIdRef = useRef(null);
@@ -74,7 +78,8 @@ const useWebSocket = () => {
             messageType: messageData.messageType || "TEXT",
             createdAt: messageData.timestamp || new Date().toISOString(),
             senderId: messageData.senderId,
-            senderName: messageData.senderFullName || messageData.senderUsername,
+            senderName:
+              messageData.senderFullName || messageData.senderUsername,
           },
         },
       });
@@ -89,7 +94,7 @@ const useWebSocket = () => {
         });
       }
     },
-    [dispatch]
+    [dispatch],
   );
 
   const handleTypingUpdate = useCallback(
@@ -112,7 +117,7 @@ const useWebSocket = () => {
         });
       }
     },
-    [dispatch]
+    [dispatch],
   );
 
   const handlePresenceUpdate = useCallback((presenceData) => {}, []);
@@ -135,7 +140,7 @@ const useWebSocket = () => {
         });
       }
     },
-    [dispatch]
+    [dispatch],
   );
 
   const connect = useCallback(async () => {
@@ -151,7 +156,7 @@ const useWebSocket = () => {
         handleTypingUpdate,
         handlePresenceUpdate,
         auth.user.id,
-        handleMessageUpdate
+        handleMessageUpdate,
       );
       connectedRef.current = true;
     } catch (error) {
@@ -174,14 +179,22 @@ const useWebSocket = () => {
     }
   }, []);
 
-
-  const sendMessage = useCallback((chatId, content, messageType = "TEXT", clientMessageId, replyToId) => {
-    if (!webSocketService.isConnected()) {
-      console.warn("WebSocket not connected, cannot send message");
-      return false;
-    }
-    return webSocketService.sendChatMessage(chatId, content, messageType, clientMessageId, replyToId);
-  }, []);
+  const sendMessage = useCallback(
+    (chatId, content, messageType = "TEXT", clientMessageId, replyToId) => {
+      if (!webSocketService.isConnected()) {
+        console.warn("WebSocket not connected, cannot send message");
+        return false;
+      }
+      return webSocketService.sendChatMessage(
+        chatId,
+        content,
+        messageType,
+        clientMessageId,
+        replyToId,
+      );
+    },
+    [],
+  );
 
   const sendTypingIndicator = useCallback((chatId, isTyping) => {
     if (!webSocketService.isConnected()) {

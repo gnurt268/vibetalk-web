@@ -3,12 +3,12 @@ import { useSelector } from "react-redux";
 import cryptoService from "../../services/CryptoService";
 
 const ChatCard = ({ chat, isActive, unreadCount = 0 }) => {
-  const store = useSelector((store) => store);
-  const currentUser = store.auth?.user;
-  const [decryptedLastMsg, setDecryptedLastMsg] = useState(null);
-
+  const currentUser = useSelector((store) => store.auth?.user);
   const chatMessages =
-    store.message?.messagesByChat?.[chat?.id]?.messages || [];
+    useSelector(
+      (store) => store.message?.messagesByChat?.[chat?.id]?.messages,
+    ) || [];
+  const [decryptedLastMsg, setDecryptedLastMsg] = useState(null);
 
   if (!chat) return null;
 

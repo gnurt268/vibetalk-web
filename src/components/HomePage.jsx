@@ -26,7 +26,14 @@ import CreateGroup from "./GroupChat/CreateGroup";
 import StartNewChat from "./Chat/StartNewChat";
 import { logout } from "../redux/Auth/Action";
 import { useDispatch, useSelector } from "react-redux";
-import { getUserChats, searchChats, setActiveChat, clearUnreadCount, deleteGroupChat, leaveGroup } from "../redux/Chat/Action";
+import {
+  getUserChats,
+  searchChats,
+  setActiveChat,
+  clearUnreadCount,
+  deleteGroupChat,
+  leaveGroup,
+} from "../redux/Chat/Action";
 import useWebSocket from "../hooks/useWebSocket";
 
 import {
@@ -43,11 +50,6 @@ import {
   ADD_OPTIMISTIC_MESSAGE,
   MARK_MESSAGE_FAILED,
 } from "../redux/Message/ActionType";
-
-import {
-  selectMessagesByChat,
-  selectMessageDraft,
-} from "../redux/Message/Selectors";
 
 const HomePage = () => {
   const [querys, setQuerys] = useState("");
@@ -68,7 +70,10 @@ const HomePage = () => {
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [chatSearchResults, setChatSearchResults] = useState([]);
   const [chatSearchIndex, setChatSearchIndex] = useState(-1);
-  const [activeSearchHighlight, setActiveSearchHighlight] = useState({ messageId: null, query: "" });
+  const [activeSearchHighlight, setActiveSearchHighlight] = useState({
+    messageId: null,
+    query: "",
+  });
   const [isSearchingChat, setIsSearchingChat] = useState(false);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatInfo, setShowChatInfo] = useState(false);
@@ -84,10 +89,9 @@ const HomePage = () => {
   const chatSearchRef = useRef(null);
   const chatMenuRef = useRef(null);
 
-  const store = useSelector((store) => store);
-  const { auth } = store;
-  const { chat } = store;
-  const { message } = store;
+  const auth = useSelector((store) => store.auth);
+  const chat = useSelector((store) => store.chat);
+  const message = useSelector((store) => store.message);
 
   const currentUser = auth?.user;
   const currentChat = chat?.activeChat;
@@ -95,22 +99,28 @@ const HomePage = () => {
   const searchResults = Array.isArray(chat?.searchResults)
     ? chat.searchResults
     : [];
-  const messages =
-    currentChat?.id && message
-      ? selectMessagesByChat(store, currentChat.id)
-      : [];
+  const messagesRaw = useSelector((store) =>
+    currentChat?.id
+      ? store.message?.messagesByChat?.[currentChat.id]?.messages
+      : undefined,
+  );
+  const messages = messagesRaw || [];
   const messageDraft =
-    currentChat?.id && message ? selectMessageDraft(store, currentChat.id) : "";
+    useSelector((store) =>
+      currentChat?.id
+        ? store.message?.messageDrafts?.[currentChat.id]
+        : undefined,
+    ) || "";
   const isLoadingChats = chat?.loading || false;
   const isLoadingMessages = message?.messageLoading;
   const isSendingMessage = message?.sendingMessage;
   const isUploadingFile = message?.uploadingFile;
   const replyingTo = message?.replyingTo;
   const hasMore = currentChat?.id
-    ? message?.messagesByChat?.[currentChat.id]?.hasMore ?? true
+    ? (message?.messagesByChat?.[currentChat.id]?.hasMore ?? true)
     : false;
   const currentPage = currentChat?.id
-    ? message?.messagesByChat?.[currentChat.id]?.page ?? 0
+    ? (message?.messagesByChat?.[currentChat.id]?.page ?? 0)
     : 0;
 
   const open = Boolean(anchorEl);
@@ -149,7 +159,6 @@ const HomePage = () => {
   const prevMessagesLengthRef = useRef(0);
   const shouldScrollRef = useRef(true);
 
-  // Scroll xuống cuối khi mở chat mới
   useEffect(() => {
     if (currentChat?.id) {
       shouldScrollRef.current = true;
@@ -163,17 +172,18 @@ const HomePage = () => {
     const newLength = messages.length;
 
     if (shouldScrollRef.current) {
-      // Mở chat lần đầu → scroll xuống cuối sau khi render
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
         shouldScrollRef.current = false;
       }, 100);
     } else if (newLength > prevLength && prevLength > 0) {
-      // Có tin mới (append ở cuối) → kiểm tra nếu đang ở gần cuối thì scroll
       const container = messagesContainerRef.current;
       if (container) {
         const isNearBottom =
-          container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+          container.scrollHeight -
+            container.scrollTop -
+            container.clientHeight <
+          150;
         if (isNearBottom) {
           setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -181,7 +191,6 @@ const HomePage = () => {
         }
       }
     }
-    // Load tin cũ (prepend) → không scroll, handleLoadMore đã giữ vị trí
 
     prevMessagesLengthRef.current = newLength;
   }, [messages.length]);
@@ -218,10 +227,12 @@ const HomePage = () => {
     markMessageAsRead,
   ]);
 
-  // Close emoji picker on click outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target)
+      ) {
         setShowEmojiPicker(false);
       }
     };
@@ -238,12 +249,12 @@ const HomePage = () => {
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const newContent = content.substring(0, start) + emoji + content.substring(end);
+      const newContent =
+        content.substring(0, start) + emoji + content.substring(end);
       setContent(newContent);
       if (currentChat) {
         dispatch(setMessageDraft(currentChat.id, newContent));
       }
-      // Set cursor after emoji
       setTimeout(() => {
         textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
         textarea.focus();
@@ -294,7 +305,6 @@ const HomePage = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    // Lưu scroll position trước khi load
     const prevScrollHeight = container.scrollHeight;
 
     setIsLoadingMore(true);
@@ -304,7 +314,6 @@ const HomePage = () => {
       setIsLoadingMore(false);
     }
 
-    // Giữ vị trí scroll sau khi prepend tin cũ
     requestAnimationFrame(() => {
       const newScrollHeight = container.scrollHeight;
       container.scrollTop = newScrollHeight - prevScrollHeight;
@@ -314,12 +323,11 @@ const HomePage = () => {
   const handleMessagesScroll = useCallback(
     (e) => {
       const { scrollTop } = e.target;
-      // Khi scroll lên gần đầu (< 50px) → load thêm tin cũ
       if (scrollTop < 50 && hasMore && !isLoadingMore) {
         handleLoadMore();
       }
     },
-    [hasMore, isLoadingMore, handleLoadMore]
+    [hasMore, isLoadingMore, handleLoadMore],
   );
 
   const handleClick = (event) => {
@@ -358,16 +366,19 @@ const HomePage = () => {
 
         let searchText = msg.content;
 
-        // Decrypt E2EE message for search
         if (cryptoService.isEncrypted(msg.content)) {
           try {
             const parsed = cryptoService.parseEncryptedContent(msg.content);
             const myUserId = currentUser?.id?.toString();
             const myKey = parsed?.encryptedKeys?.[myUserId];
             if (myKey && parsed.encryptedContent && parsed.iv) {
-              searchText = await cryptoService.decryptMessage(parsed.encryptedContent, myKey, parsed.iv);
+              searchText = await cryptoService.decryptMessage(
+                parsed.encryptedContent,
+                myKey,
+                parsed.iv,
+              );
             } else {
-              continue; // Cannot decrypt, skip
+              continue;
             }
           } catch {
             continue;
@@ -375,7 +386,6 @@ const HomePage = () => {
         }
 
         if (searchText.toLowerCase().includes(q)) {
-          // Store decrypted text for display in results
           matched.push({ ...msg, _searchText: searchText });
         }
       }
@@ -409,14 +419,14 @@ const HomePage = () => {
   };
 
   // ===== CHAT MENU =====
-  // Click outside to close
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (chatMenuRef.current && !chatMenuRef.current.contains(e.target)) {
         setShowChatMenu(false);
       }
     };
-    if (showChatMenu) document.addEventListener("mousedown", handleClickOutside);
+    if (showChatMenu)
+      document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showChatMenu]);
 
@@ -428,7 +438,8 @@ const HomePage = () => {
       dispatch(setActiveChat(null));
       dispatch(getUserChats());
     } catch (error) {
-      alert("Failed to delete chat");
+      console.error("Delete chat error:", error);
+      alert(error.response?.data?.message || "Failed to delete chat");
     }
     setShowChatMenu(false);
   };
@@ -454,34 +465,32 @@ const HomePage = () => {
   const encryptForChat = async (plainText) => {
     try {
       if (!currentChat?.members || !cryptoService.hasKeyPair()) {
-        return plainText; // Fallback: không mã hóa
+        return plainText;
       }
 
-      // Lấy public keys của tất cả members
       const recipients = [];
       for (const member of currentChat.members) {
-        // Dùng publicKey đã có trên User object, hoặc fetch từ server
         let publicKey = member.publicKey;
         if (!publicKey) {
           try {
             const res = await api.get(`/api/users/${member.id}/public-key`);
             publicKey = res.data.publicKey;
-          } catch {
-            // Member chưa có public key → skip E2EE
-          }
+          } catch {}
         }
         if (publicKey) {
           recipients.push({ userId: member.id, publicKey });
         }
       }
 
-      // Nếu không đủ public keys → gửi plaintext
       if (recipients.length < currentChat.members.length) {
-        console.warn("[E2EE] Not all members have public keys, sending unencrypted");
+        console.warn(
+          "[E2EE] Not all members have public keys, sending unencrypted",
+        );
         return plainText;
       }
 
-      const { encryptedContent, iv, encryptedKeys } = await cryptoService.encryptForGroup(plainText, recipients);
+      const { encryptedContent, iv, encryptedKeys } =
+        await cryptoService.encryptForGroup(plainText, recipients);
 
       return JSON.stringify({
         _e2ee: true,
@@ -502,7 +511,6 @@ const HomePage = () => {
     const messageText = content.trim();
     const currentReplyTo = replyingTo;
 
-    // Stop typing indicator
     if (isTyping) {
       setIsTyping(false);
       sendTypingIndicator(currentChat.id, false);
@@ -512,7 +520,6 @@ const HomePage = () => {
       }
     }
 
-    // 1. Optimistic: hiện message ngay
     dispatch({
       type: ADD_OPTIMISTIC_MESSAGE,
       payload: {
@@ -539,7 +546,6 @@ const HomePage = () => {
       },
     });
 
-    // Clear input + reply ngay
     setContent("");
     dispatch(setMessageDraft(currentChat.id, ""));
     if (currentReplyTo) dispatch(clearReplyingTo());
@@ -549,24 +555,29 @@ const HomePage = () => {
     }
     setTimeout(() => scrollToBottom(), 100);
 
-    // 2. Encrypt + Gửi qua WS hoặc HTTP
     try {
       const encryptedContent = await encryptForChat(messageText);
 
       let success = false;
       if (wsConnected) {
         success = sendWebSocketMessage(
-          currentChat.id, encryptedContent, "TEXT", clientMessageId, currentReplyTo?.id
+          currentChat.id,
+          encryptedContent,
+          "TEXT",
+          clientMessageId,
+          currentReplyTo?.id,
         );
       }
       if (!success) {
-        await dispatch(sendMessage({
-          content: encryptedContent,
-          chatId: currentChat.id,
-          messageType: "TEXT",
-          clientMessageId,
-          replyToId: currentReplyTo?.id,
-        }));
+        await dispatch(
+          sendMessage({
+            content: encryptedContent,
+            chatId: currentChat.id,
+            messageType: "TEXT",
+            clientMessageId,
+            replyToId: currentReplyTo?.id,
+          }),
+        );
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -597,7 +608,7 @@ const HomePage = () => {
 
   const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
   const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-  const MAX_FILE_SIZE = 25 * 1024 * 1024;  // 25MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -623,7 +634,6 @@ const HomePage = () => {
       setFilePreview(null);
     }
 
-    // Reset input để có thể chọn lại cùng file
     e.target.value = "";
   };
 
@@ -640,12 +650,17 @@ const HomePage = () => {
     const isImage = IMAGE_TYPES.includes(selectedFile.type);
     const caption = content.trim() || "";
 
-    // 1. Optimistic: hiện message ngay với preview
     dispatch({
       type: ADD_OPTIMISTIC_MESSAGE,
       payload: {
         clientMessageId,
-        content: (filePreview || "") + "|" + selectedFile.name + "|" + selectedFile.size + (caption ? "|" + caption : ""),
+        content:
+          (filePreview || "") +
+          "|" +
+          selectedFile.name +
+          "|" +
+          selectedFile.size +
+          (caption ? "|" + caption : ""),
         messageType: isImage ? "IMAGE" : "FILE",
         createdAt: new Date().toISOString(),
         status: "UPLOADING",
@@ -659,7 +674,6 @@ const HomePage = () => {
       },
     });
 
-    // Clear UI ngay
     const fileToUpload = selectedFile;
     const captionToSend = caption || undefined;
     handleFileRemove();
@@ -667,14 +681,18 @@ const HomePage = () => {
     dispatch(setMessageDraft(currentChat.id, ""));
     setTimeout(() => scrollToBottom(), 100);
 
-    // 2. Upload
     try {
       await dispatch(
-        uploadAndSendFile(fileToUpload, currentChat.id, captionToSend, (progress) => {
-          setUploadProgress(progress);
-        }, clientMessageId)
+        uploadAndSendFile(
+          fileToUpload,
+          currentChat.id,
+          captionToSend,
+          (progress) => {
+            setUploadProgress(progress);
+          },
+          clientMessageId,
+        ),
       );
-      // WebSocket broadcast sẽ replace optimistic message qua NEW_MESSAGE_RECEIVED
     } catch (error) {
       console.error("Error uploading file:", error);
       dispatch({
@@ -974,417 +992,504 @@ const HomePage = () => {
           <div className="right w-[70%] h-full bg-white relative flex">
             {/* Chat content area */}
             <div className="flex-1 h-full relative min-w-0">
-            {/* Chat header */}
-            <div className="header absolute top-0 w-full bg-white border-b border-gray-200 shadow-sm z-10">
-              <div className="flex justify-between">
-                <div className="py-3 space-x-4 flex items-center px-3">
-                  <img
-                    className="rounded-full w-10 h-10 cursor-pointer"
-                    src={(() => {
-                      if (currentChat.groupChat) {
-                        return currentChat.chatImage || "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png";
-                      }
-                      // Try currentChat.members first, then fallback to chats list
-                      const chatData = currentChat.members?.length > 0
-                        ? currentChat
-                        : chats?.find(c => c.id === currentChat.id) || currentChat;
-                      const otherUser = chatData.members?.find(m => m.id !== currentUser?.id);
-                      return otherUser?.urlAvatar || "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png";
-                    })()}
-                    alt="chat"
-                  />
-                  <div className="flex flex-col">
-                    <p className="font-medium">
-                      {currentChat.groupChat
-                        ? currentChat.chatName || "Group Chat"
-                        : currentChat.members?.find(
-                            (member) => member.id !== currentUser?.id,
-                          )?.fullName || "Chat"}
-                    </p>
-                    {currentChat.groupChat && (
-                      <p className="text-xs text-gray-500">
-                        {currentChat.members?.length || 0} members
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="py-3 flex space-x-4 items-center px-3 text-gray-600">
-                  <AiOutlineSearch
-                    className="cursor-pointer hover:text-gray-800 text-xl"
-                    onClick={() => {
-                      setShowChatSearch((prev) => !prev);
-                      if (showChatSearch) closeChatSearch();
-                    }}
-                  />
-                  <div className="relative" ref={chatMenuRef}>
-                    <BsThreeDotsVertical
-                      className="cursor-pointer hover:text-gray-800 text-xl"
-                      onClick={() => setShowChatMenu((prev) => !prev)}
+              {/* Chat header */}
+              <div className="header absolute top-0 w-full bg-white border-b border-gray-200 shadow-sm z-10">
+                <div className="flex justify-between">
+                  <div className="py-3 space-x-4 flex items-center px-3">
+                    <img
+                      className="rounded-full w-10 h-10 cursor-pointer"
+                      src={(() => {
+                        if (currentChat.groupChat) {
+                          return (
+                            currentChat.chatImage ||
+                            "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
+                          );
+                        }
+                        const chatData =
+                          currentChat.members?.length > 0
+                            ? currentChat
+                            : chats?.find((c) => c.id === currentChat.id) ||
+                              currentChat;
+                        const otherUser = chatData.members?.find(
+                          (m) => m.id !== currentUser?.id,
+                        );
+                        return (
+                          otherUser?.urlAvatar ||
+                          "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
+                        );
+                      })()}
+                      alt="chat"
                     />
-                    {/* Chat menu dropdown */}
-                    {showChatMenu && (
-                      <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px] z-30">
-                        {/* Info */}
-                        <button
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
-                          onClick={() => { setShowChatInfo(true); setShowChatMenu(false); setShowChatSearch(false); }}
-                        >
-                          <span>ℹ️</span>
-                          <span>{currentChat.groupChat ? "Group info" : "Chat info"}</span>
-                        </button>
-
-                        {/* Private chat: Nickname */}
-                        {!currentChat.groupChat && (
-                          <button
-                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
-                            onClick={() => { setShowChatInfo(true); setShowChatMenu(false); setShowChatSearch(false); }}
-                          >
-                            <span>✏️</span>
-                            <span>Set nickname</span>
-                          </button>
-                        )}
-
-                        {/* Group: Members */}
-                        {currentChat.groupChat && (
-                          <button
-                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
-                            onClick={() => { setShowChatInfo(true); setShowChatMenu(false); setShowChatSearch(false); }}
-                          >
-                            <span>👥</span>
-                            <span>Members ({currentChat.members?.length || 0})</span>
-                          </button>
-                        )}
-
-                        {/* Group admin: Rename */}
-                        {currentChat.groupChat && (currentChat.createdBy?.id === currentUser?.id || currentChat.admins?.some(a => a.id === currentUser?.id)) && (
-                          <button
-                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
-                            onClick={async () => {
-                              const newName = prompt("Enter new group name:", currentChat.chatName);
-                              if (newName && newName.trim() && newName.trim() !== currentChat.chatName) {
-                                try {
-                                  const token = localStorage.getItem("token");
-                                  await api.put(`/api/chats/${currentChat.id}/name`, newName.trim(), {
-                                    headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
-                                  });
-                                  dispatch(getUserChats());
-                                } catch (err) {
-                                  alert("Failed to rename group");
-                                }
-                              }
-                              setShowChatMenu(false);
-                            }}
-                          >
-                            <span>📝</span>
-                            <span>Change group name</span>
-                          </button>
-                        )}
-
-                        {/* Group admin: Change photo */}
-                        {currentChat.groupChat && (currentChat.createdBy?.id === currentUser?.id || currentChat.admins?.some(a => a.id === currentUser?.id)) && (
-                          <label
-                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3 cursor-pointer"
-                          >
-                            <span>📷</span>
-                            <span>Change group photo</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                try {
-                                  const formData = new FormData();
-                                  formData.append("file", file);
-                                  const token = localStorage.getItem("token");
-                                  const uploadRes = await api.post("/api/users/upload-avatar", formData, {
-                                    headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
-                                  });
-                                  await api.put(`/api/chats/${currentChat.id}/image`, uploadRes.data.imageUrl, {
-                                    headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
-                                  });
-                                  dispatch(getUserChats());
-                                } catch (err) {
-                                  alert("Failed to update group photo");
-                                }
-                                e.target.value = "";
-                                setShowChatMenu(false);
-                              }}
-                            />
-                          </label>
-                        )}
-
-                        {/* Group admin: Add member */}
-                        {currentChat.groupChat && (currentChat.createdBy?.id === currentUser?.id || currentChat.admins?.some(a => a.id === currentUser?.id)) && (
-                          <button
-                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
-                            onClick={() => { setShowChatInfo(true); setShowChatMenu(false); setShowChatSearch(false); }}
-                          >
-                            <span>➕</span>
-                            <span>Add member</span>
-                          </button>
-                        )}
-
-                        <div className="border-t border-gray-100 my-1"></div>
-
-                        {/* Group: Leave */}
-                        {currentChat.groupChat && (
-                          <button
-                            className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
-                            onClick={handleLeaveGroup}
-                          >
-                            <span>🚪</span>
-                            <span>Leave group</span>
-                          </button>
-                        )}
-
-                        {/* Delete chat */}
-                        <button
-                          className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
-                          onClick={handleDeleteChat}
-                        >
-                          <span>🗑️</span>
-                          <span>Delete chat</span>
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex flex-col">
+                      <p className="font-medium">
+                        {currentChat.groupChat
+                          ? currentChat.chatName || "Group Chat"
+                          : currentChat.members?.find(
+                              (member) => member.id !== currentUser?.id,
+                            )?.fullName || "Chat"}
+                      </p>
+                      {currentChat.groupChat && (
+                        <p className="text-xs text-gray-500">
+                          {currentChat.members?.length || 0} members
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Chat messages area */}
-            <div
-              ref={messagesContainerRef}
-              onScroll={handleMessagesScroll}
-              className="messages pt-20 px-3 overflow-y-auto flex flex-col space-y-2 bg-[#efeae2] absolute top-0 left-0 right-0"
-              style={{
-                bottom: `${inputHeight}px`,
-              }}
-            >
-              <div className="flex flex-col items-start space-y-2 pb-4">
-                {/* Loading more indicator */}
-                {isLoadingMore && (
-                  <div className="flex justify-center items-center py-3">
-                    <div className="text-sm text-gray-500">Loading older messages...</div>
-                  </div>
-                )}
-                {!hasMore && messages.length > 0 && (
-                  <div className="flex justify-center items-center py-3">
-                    <div className="text-xs text-gray-400">Beginning of conversation</div>
-                  </div>
-                )}
-                {isLoadingMessages ? (
-                  <div className="flex justify-center items-center h-20">
-                    <div className="text-gray-500">Loading messages...</div>
-                  </div>
-                ) : messages.length > 0 ? (
-                  messages.map((msg, index) => (
-                    <MessageCard
-                      key={msg.id || msg.clientMessageId}
-                      message={msg}
-                      messageDomId={`msg-${msg.id}`}
-                      isReqUserMessage={msg.sender?.id === currentUser?.id}
-                      content={msg.content}
-                      highlightText={activeSearchHighlight.messageId === msg.id ? activeSearchHighlight.query : ""}
-                      encryptFn={encryptForChat}
-                      onReply={(m) => {
-                        dispatch(setReplyingTo(m));
-                        textareaRef.current?.focus();
+                  <div className="py-3 flex space-x-4 items-center px-3 text-gray-600">
+                    <AiOutlineSearch
+                      className="cursor-pointer hover:text-gray-800 text-xl"
+                      onClick={() => {
+                        setShowChatSearch((prev) => !prev);
+                        if (showChatSearch) closeChatSearch();
                       }}
                     />
-                  ))
-                ) : (
-                  <div className="flex justify-center items-center h-20">
-                    <div className="text-gray-500">
-                      No messages yet. Start the conversation!
+                    <div className="relative" ref={chatMenuRef}>
+                      <BsThreeDotsVertical
+                        className="cursor-pointer hover:text-gray-800 text-xl"
+                        onClick={() => setShowChatMenu((prev) => !prev)}
+                      />
+                      {/* Chat menu dropdown */}
+                      {showChatMenu && (
+                        <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px] z-30">
+                          {/* Info */}
+                          <button
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                            onClick={() => {
+                              setShowChatInfo(true);
+                              setShowChatMenu(false);
+                              setShowChatSearch(false);
+                            }}
+                          >
+                            <span>ℹ️</span>
+                            <span>
+                              {currentChat.groupChat
+                                ? "Group info"
+                                : "Chat info"}
+                            </span>
+                          </button>
+
+                          {/* Private chat: Nickname */}
+                          {!currentChat.groupChat && (
+                            <button
+                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                              onClick={() => {
+                                setShowChatInfo(true);
+                                setShowChatMenu(false);
+                                setShowChatSearch(false);
+                              }}
+                            >
+                              <span>✏️</span>
+                              <span>Set nickname</span>
+                            </button>
+                          )}
+
+                          {/* Group: Members */}
+                          {currentChat.groupChat && (
+                            <button
+                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                              onClick={() => {
+                                setShowChatInfo(true);
+                                setShowChatMenu(false);
+                                setShowChatSearch(false);
+                              }}
+                            >
+                              <span>👥</span>
+                              <span>
+                                Members ({currentChat.members?.length || 0})
+                              </span>
+                            </button>
+                          )}
+
+                          {/* Group admin: Rename */}
+                          {currentChat.groupChat &&
+                            (currentChat.createdBy?.id === currentUser?.id ||
+                              currentChat.admins?.some(
+                                (a) => a.id === currentUser?.id,
+                              )) && (
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                                onClick={async () => {
+                                  const newName = prompt(
+                                    "Enter new group name:",
+                                    currentChat.chatName,
+                                  );
+                                  if (
+                                    newName &&
+                                    newName.trim() &&
+                                    newName.trim() !== currentChat.chatName
+                                  ) {
+                                    try {
+                                      const token =
+                                        localStorage.getItem("token");
+                                      await api.put(
+                                        `/api/chats/${currentChat.id}/name`,
+                                        newName.trim(),
+                                        {
+                                          headers: {
+                                            Authorization: `Bearer ${token}`,
+                                            "Content-Type": "text/plain",
+                                          },
+                                        },
+                                      );
+                                      dispatch(getUserChats());
+                                    } catch (err) {
+                                      alert("Failed to rename group");
+                                    }
+                                  }
+                                  setShowChatMenu(false);
+                                }}
+                              >
+                                <span>📝</span>
+                                <span>Change group name</span>
+                              </button>
+                            )}
+
+                          {/* Group admin: Change photo */}
+                          {currentChat.groupChat &&
+                            (currentChat.createdBy?.id === currentUser?.id ||
+                              currentChat.admins?.some(
+                                (a) => a.id === currentUser?.id,
+                              )) && (
+                              <label className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3 cursor-pointer">
+                                <span>📷</span>
+                                <span>Change group photo</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const formData = new FormData();
+                                      formData.append("file", file);
+                                      const token =
+                                        localStorage.getItem("token");
+                                      const uploadRes = await api.post(
+                                        "/api/users/upload-avatar",
+                                        formData,
+                                        {
+                                          headers: {
+                                            Authorization: `Bearer ${token}`,
+                                            "Content-Type":
+                                              "multipart/form-data",
+                                          },
+                                        },
+                                      );
+                                      await api.put(
+                                        `/api/chats/${currentChat.id}/image`,
+                                        uploadRes.data.imageUrl,
+                                        {
+                                          headers: {
+                                            Authorization: `Bearer ${token}`,
+                                            "Content-Type": "text/plain",
+                                          },
+                                        },
+                                      );
+                                      dispatch(getUserChats());
+                                    } catch (err) {
+                                      alert("Failed to update group photo");
+                                    }
+                                    e.target.value = "";
+                                    setShowChatMenu(false);
+                                  }}
+                                />
+                              </label>
+                            )}
+
+                          {/* Group admin: Add member */}
+                          {currentChat.groupChat &&
+                            (currentChat.createdBy?.id === currentUser?.id ||
+                              currentChat.admins?.some(
+                                (a) => a.id === currentUser?.id,
+                              )) && (
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                                onClick={() => {
+                                  setShowChatInfo(true);
+                                  setShowChatMenu(false);
+                                  setShowChatSearch(false);
+                                }}
+                              >
+                                <span>➕</span>
+                                <span>Add member</span>
+                              </button>
+                            )}
+
+                          <div className="border-t border-gray-100 my-1"></div>
+
+                          {/* Group: Leave */}
+                          {currentChat.groupChat && (
+                            <button
+                              className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                              onClick={handleLeaveGroup}
+                            >
+                              <span>🚪</span>
+                              <span>Leave group</span>
+                            </button>
+                          )}
+
+                          {/* Delete chat */}
+                          <button
+                            className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                            onClick={handleDeleteChat}
+                          >
+                            <span>🗑️</span>
+                            <span>Delete chat</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-                {/* Typing Indicator */}
-                <TypingIndicator />
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-
-            {/* Message input */}
-            <div
-              ref={inputContainerRef}
-              className="absolute bottom-0 left-0 right-0 bg-[#f0f2f5] px-3 py-2 flex flex-col"
-              style={{ minHeight: `${inputHeight}px` }}
-            >
-              {/* Reply preview bar */}
-              {replyingTo && (
-                <div className="mb-2 p-2 bg-white rounded-lg border-l-4 border-green-500 flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-green-600">
-                      {replyingTo.sender?.id === currentUser?.id
-                        ? "You"
-                        : replyingTo.sender?.fullName}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {replyingTo.messageType === "IMAGE"
-                        ? "📷 Photo"
-                        : replyingTo.messageType === "FILE"
-                          ? "📎 File"
-                          : replyingTo.content}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => dispatch(clearReplyingTo())}
-                    className="p-1 hover:bg-gray-100 rounded-full ml-2 flex-shrink-0"
-                  >
-                    <IoClose className="text-lg text-gray-500" />
-                  </button>
                 </div>
-              )}
+              </div>
 
-              {/* File preview */}
-              {selectedFile && (
-                <div className="mb-2 p-2 bg-white rounded-lg border border-gray-200 flex items-center space-x-3">
-                  {filePreview ? (
-                    <img
-                      src={filePreview}
-                      alt="preview"
-                      className="w-16 h-16 object-cover rounded-md"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center text-2xl">
-                      📎
+              {/* Chat messages area */}
+              <div
+                ref={messagesContainerRef}
+                onScroll={handleMessagesScroll}
+                className="messages pt-20 px-3 overflow-y-auto flex flex-col space-y-2 bg-[#efeae2] absolute top-0 left-0 right-0"
+                style={{
+                  bottom: `${inputHeight}px`,
+                }}
+              >
+                <div className="flex flex-col items-start space-y-2 pb-4">
+                  {/* Loading more indicator */}
+                  {isLoadingMore && (
+                    <div className="flex justify-center items-center py-3">
+                      <div className="text-sm text-gray-500">
+                        Loading older messages...
+                      </div>
                     </div>
                   )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-700 truncate">
-                      {selectedFile.name}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {formatFileSize(selectedFile.size)}
-                    </p>
-                    {isUploadingFile && (
-                      <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
-                        <div
-                          className="bg-green-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
+                  {!hasMore && messages.length > 0 && (
+                    <div className="flex justify-center items-center py-3">
+                      <div className="text-xs text-gray-400">
+                        Beginning of conversation
+                      </div>
+                    </div>
+                  )}
+                  {isLoadingMessages ? (
+                    <div className="flex justify-center items-center h-20">
+                      <div className="text-gray-500">Loading messages...</div>
+                    </div>
+                  ) : messages.length > 0 ? (
+                    messages.map((msg, index) => (
+                      <MessageCard
+                        key={msg.id || msg.clientMessageId}
+                        message={msg}
+                        messageDomId={`msg-${msg.id}`}
+                        isReqUserMessage={msg.sender?.id === currentUser?.id}
+                        content={msg.content}
+                        highlightText={
+                          activeSearchHighlight.messageId === msg.id
+                            ? activeSearchHighlight.query
+                            : ""
+                        }
+                        encryptFn={encryptForChat}
+                        onReply={(m) => {
+                          dispatch(setReplyingTo(m));
+                          textareaRef.current?.focus();
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <div className="flex justify-center items-center h-20">
+                      <div className="text-gray-500">
+                        No messages yet. Start the conversation!
+                      </div>
+                    </div>
+                  )}
+                  {/* Typing Indicator */}
+                  <TypingIndicator />
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+
+              {/* Message input */}
+              <div
+                ref={inputContainerRef}
+                className="absolute bottom-0 left-0 right-0 bg-[#f0f2f5] px-3 py-2 flex flex-col"
+                style={{ minHeight: `${inputHeight}px` }}
+              >
+                {/* Reply preview bar */}
+                {replyingTo && (
+                  <div className="mb-2 p-2 bg-white rounded-lg border-l-4 border-green-500 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-green-600">
+                        {replyingTo.sender?.id === currentUser?.id
+                          ? "You"
+                          : replyingTo.sender?.fullName}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {replyingTo.messageType === "IMAGE"
+                          ? "📷 Photo"
+                          : replyingTo.messageType === "FILE"
+                            ? "📎 File"
+                            : replyingTo.content}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => dispatch(clearReplyingTo())}
+                      className="p-1 hover:bg-gray-100 rounded-full ml-2 flex-shrink-0"
+                    >
+                      <IoClose className="text-lg text-gray-500" />
+                    </button>
+                  </div>
+                )}
+
+                {/* File preview */}
+                {selectedFile && (
+                  <div className="mb-2 p-2 bg-white rounded-lg border border-gray-200 flex items-center space-x-3">
+                    {filePreview ? (
+                      <img
+                        src={filePreview}
+                        alt="preview"
+                        className="w-16 h-16 object-cover rounded-md"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center text-2xl">
+                        📎
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-700 truncate">
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatFileSize(selectedFile.size)}
+                      </p>
+                      {isUploadingFile && (
+                        <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            className="bg-green-500 h-1.5 rounded-full transition-all duration-300"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleFileRemove}
+                      className="p-1 hover:bg-gray-100 rounded-full"
+                      disabled={isUploadingFile}
+                    >
+                      <IoClose className="text-xl text-gray-500" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Input row */}
+                <div className="flex items-end space-x-3">
+                  <div className="relative" ref={emojiPickerRef}>
+                    <BsEmojiSmile
+                      className={`text-2xl cursor-pointer transition-colors ${
+                        showEmojiPicker
+                          ? "text-green-600"
+                          : "text-gray-500 hover:text-gray-700"
+                      }`}
+                      onClick={() => setShowEmojiPicker((prev) => !prev)}
+                    />
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-10 left-0 z-50 shadow-xl rounded-lg">
+                        <EmojiPicker
+                          onEmojiClick={handleEmojiClick}
+                          width={320}
+                          height={400}
+                          searchPlaceHolder="Search emoji..."
+                          previewConfig={{ showPreview: false }}
+                          skinTonesDisabled
+                          lazyLoadEmojis
                         />
                       </div>
                     )}
                   </div>
+
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"
+                  />
+                  <ImAttachment
+                    className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700"
+                    onClick={() => fileInputRef.current?.click()}
+                  />
+
+                  <div className="flex-1 relative">
+                    <textarea
+                      ref={textareaRef}
+                      className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
+                      placeholder={
+                        selectedFile ? "Add a caption..." : "Type a message..."
+                      }
+                      value={content}
+                      onChange={(e) => handleContentChange(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (selectedFile) {
+                            handleSendFile();
+                          } else {
+                            handleCreateNewMessage();
+                          }
+                        }
+                      }}
+                      style={{ minHeight: "40px", maxHeight: "120px" }}
+                      onInput={(e) => {
+                        e.target.style.height = "auto";
+                        const newHeight = Math.min(
+                          Math.max(e.target.scrollHeight, 40),
+                          120,
+                        );
+                        e.target.style.height = newHeight + "px";
+                        setInputHeight(Math.max(100, newHeight + 60));
+                      }}
+                      disabled={isSendingMessage || isUploadingFile}
+                    />
+                  </div>
+
                   <button
-                    onClick={handleFileRemove}
-                    className="p-1 hover:bg-gray-100 rounded-full"
-                    disabled={isUploadingFile}
+                    onClick={
+                      selectedFile ? handleSendFile : handleCreateNewMessage
+                    }
+                    disabled={
+                      selectedFile
+                        ? isUploadingFile
+                        : !content.trim() || isSendingMessage
+                    }
+                    className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                    title={
+                      selectedFile
+                        ? isUploadingFile
+                          ? `Uploading... ${uploadProgress}%`
+                          : "Send file"
+                        : wsConnected
+                          ? "Send via WebSocket"
+                          : "Send via HTTP"
+                    }
                   >
-                    <IoClose className="text-xl text-gray-500" />
+                    {isUploadingFile ? (
+                      <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <IoSend
+                        className={`text-2xl ${
+                          selectedFile
+                            ? "text-green-600 hover:text-green-700"
+                            : !content.trim() || isSendingMessage
+                              ? "text-gray-400"
+                              : wsConnected
+                                ? "text-green-600 hover:text-green-700"
+                                : "text-blue-600 hover:text-blue-700"
+                        } transition-colors`}
+                      />
+                    )}
                   </button>
                 </div>
-              )}
-
-              {/* Input row */}
-              <div className="flex items-end space-x-3">
-                <div className="relative" ref={emojiPickerRef}>
-                  <BsEmojiSmile
-                    className={`text-2xl cursor-pointer transition-colors ${
-                      showEmojiPicker ? "text-green-600" : "text-gray-500 hover:text-gray-700"
-                    }`}
-                    onClick={() => setShowEmojiPicker((prev) => !prev)}
-                  />
-                  {showEmojiPicker && (
-                    <div className="absolute bottom-10 left-0 z-50 shadow-xl rounded-lg">
-                      <EmojiPicker
-                        onEmojiClick={handleEmojiClick}
-                        width={320}
-                        height={400}
-                        searchPlaceHolder="Search emoji..."
-                        previewConfig={{ showPreview: false }}
-                        skinTonesDisabled
-                        lazyLoadEmojis
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Hidden file input */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"
-                />
-                <ImAttachment
-                  className="text-2xl text-gray-500 cursor-pointer hover:text-gray-700"
-                  onClick={() => fileInputRef.current?.click()}
-                />
-
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={textareaRef}
-                    className="w-full border-none outline-none bg-white rounded-lg px-4 py-2 resize-none text-sm"
-                    placeholder={selectedFile ? "Add a caption..." : "Type a message..."}
-                    value={content}
-                    onChange={(e) => handleContentChange(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (selectedFile) {
-                          handleSendFile();
-                        } else {
-                          handleCreateNewMessage();
-                        }
-                      }
-                    }}
-                    style={{ minHeight: "40px", maxHeight: "120px" }}
-                    onInput={(e) => {
-                      e.target.style.height = "auto";
-                      const newHeight = Math.min(
-                        Math.max(e.target.scrollHeight, 40),
-                        120,
-                      );
-                      e.target.style.height = newHeight + "px";
-                      setInputHeight(Math.max(100, newHeight + 60));
-                    }}
-                    disabled={isSendingMessage || isUploadingFile}
-                  />
-                </div>
-
-                <button
-                  onClick={selectedFile ? handleSendFile : handleCreateNewMessage}
-                  disabled={
-                    selectedFile
-                      ? isUploadingFile
-                      : !content.trim() || isSendingMessage
-                  }
-                  className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  title={
-                    selectedFile
-                      ? isUploadingFile
-                        ? `Uploading... ${uploadProgress}%`
-                        : "Send file"
-                      : wsConnected
-                        ? "Send via WebSocket"
-                        : "Send via HTTP"
-                  }
-                >
-                  {isUploadingFile ? (
-                    <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <IoSend
-                      className={`text-2xl ${
-                        selectedFile
-                          ? "text-green-600 hover:text-green-700"
-                          : !content.trim() || isSendingMessage
-                            ? "text-gray-400"
-                            : wsConnected
-                              ? "text-green-600 hover:text-green-700"
-                              : "text-blue-600 hover:text-blue-700"
-                      } transition-colors`}
-                    />
-                  )}
-                </button>
               </div>
             </div>
-            </div>{/* end chat content area */}
+            {/* end chat content area */}
 
             {/* Chat Info Panel */}
             {showChatInfo && (
@@ -1437,41 +1542,72 @@ const HomePage = () => {
                 <div className="flex-1 overflow-y-auto">
                   {isSearchingChat && (
                     <div className="flex justify-center py-8">
-                      <span className="text-sm text-gray-400">Searching...</span>
+                      <span className="text-sm text-gray-400">
+                        Searching...
+                      </span>
                     </div>
                   )}
 
-                  {!isSearchingChat && chatSearchQuery && chatSearchResults.length === 0 && (
-                    <div className="flex justify-center py-8">
-                      <span className="text-sm text-gray-400">No results found</span>
-                    </div>
-                  )}
+                  {!isSearchingChat &&
+                    chatSearchQuery &&
+                    chatSearchResults.length === 0 && (
+                      <div className="flex justify-center py-8">
+                        <span className="text-sm text-gray-400">
+                          No results found
+                        </span>
+                      </div>
+                    )}
 
                   {chatSearchResults.map((msg) => {
                     const isOwn = msg.sender?.id === currentUser?.id;
-                    const senderName = isOwn ? "You" : (msg.sender?.fullName || "Unknown");
+                    const senderName = isOwn
+                      ? "You"
+                      : msg.sender?.fullName || "Unknown";
                     const time = new Date(msg.createdAt);
-                    const timeStr = time.toLocaleDateString([], { month: "short", day: "numeric" }) + " " +
-                      time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+                    const timeStr =
+                      time.toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      }) +
+                      " " +
+                      time.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                      });
 
-                    // Highlight matched text in preview
                     const q = chatSearchQuery.trim().toLowerCase();
                     const contentText = msg._searchText || msg.content || "";
                     const matchIdx = contentText.toLowerCase().indexOf(q);
                     let preview;
                     if (matchIdx >= 0) {
                       const start = Math.max(0, matchIdx - 20);
-                      const end = Math.min(contentText.length, matchIdx + q.length + 30);
-                      const before = (start > 0 ? "..." : "") + contentText.slice(start, matchIdx);
-                      const match = contentText.slice(matchIdx, matchIdx + q.length);
-                      const after = contentText.slice(matchIdx + q.length, end) + (end < contentText.length ? "..." : "");
+                      const end = Math.min(
+                        contentText.length,
+                        matchIdx + q.length + 30,
+                      );
+                      const before =
+                        (start > 0 ? "..." : "") +
+                        contentText.slice(start, matchIdx);
+                      const match = contentText.slice(
+                        matchIdx,
+                        matchIdx + q.length,
+                      );
+                      const after =
+                        contentText.slice(matchIdx + q.length, end) +
+                        (end < contentText.length ? "..." : "");
                       preview = (
                         <span>
-                          {before}<mark className="bg-yellow-200 rounded">{match}</mark>{after}
+                          {before}
+                          <mark className="bg-yellow-200 rounded">{match}</mark>
+                          {after}
                         </span>
                       );
                     } else {
-                      preview = contentText.length > 50 ? contentText.slice(0, 50) + "..." : contentText;
+                      preview =
+                        contentText.length > 50
+                          ? contentText.slice(0, 50) + "..."
+                          : contentText;
                     }
 
                     return (
@@ -1479,21 +1615,33 @@ const HomePage = () => {
                         key={msg.id}
                         className="flex items-start px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 transition-colors"
                         onClick={() => {
-                          setActiveSearchHighlight({ messageId: msg.id, query: chatSearchQuery.trim() });
+                          setActiveSearchHighlight({
+                            messageId: msg.id,
+                            query: chatSearchQuery.trim(),
+                          });
                           scrollToMessage(msg.id);
                         }}
                       >
                         <img
                           className="w-9 h-9 rounded-full object-cover flex-shrink-0 mr-3"
-                          src={msg.sender?.urlAvatar || "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"}
+                          src={
+                            msg.sender?.urlAvatar ||
+                            "https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png"
+                          }
                           alt=""
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-gray-800 truncate">{senderName}</span>
-                            <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{timeStr}</span>
+                            <span className="text-sm font-semibold text-gray-800 truncate">
+                              {senderName}
+                            </span>
+                            <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                              {timeStr}
+                            </span>
                           </div>
-                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{preview}</p>
+                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
+                            {preview}
+                          </p>
                         </div>
                       </div>
                     );

@@ -13,7 +13,7 @@ import api from "../../config/api";
 
 const ChatInfoPanel = ({ chat, onClose }) => {
   const dispatch = useDispatch();
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
   const currentUser = auth?.user;
 
   const [isEditingName, setIsEditingName] = useState(false);

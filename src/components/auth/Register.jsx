@@ -21,7 +21,7 @@ const Register = () => {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { auth } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

@@ -321,10 +321,10 @@ const ChangePassword = ({ onBack }) => {
                         passwordStrength.score <= 1
                           ? "bg-red-500"
                           : passwordStrength.score <= 2
-                          ? "bg-yellow-500"
-                          : passwordStrength.score <= 3
-                          ? "bg-blue-500"
-                          : "bg-green-500"
+                            ? "bg-yellow-500"
+                            : passwordStrength.score <= 3
+                              ? "bg-blue-500"
+                              : "bg-green-500"
                       }`}
                       style={{
                         width: `${(passwordStrength.score / 5) * 100}%`,

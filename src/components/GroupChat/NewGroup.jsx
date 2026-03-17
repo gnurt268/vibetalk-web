@@ -12,7 +12,8 @@ const NewGroup = ({ onBack, onGroupCreated, selectedMembers = [] }) => {
   const [isCreating, setIsCreating] = useState(false);
 
   const dispatch = useDispatch();
-  const { auth, chat } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
+  const chat = useSelector((store) => store.chat);
   const currentUser = auth?.user;
   const isLoadingChat = chat?.isCreatingChat;
 
@@ -27,7 +28,7 @@ const NewGroup = ({ onBack, onGroupCreated, selectedMembers = [] }) => {
 
         const response = await fileUploadApi.post(
           "/api/users/upload-avatar",
-          formData
+          formData,
         );
 
         const cloudinaryUrl = response.data.imageUrl;

@@ -28,8 +28,8 @@ const MessageCard = ({
   const [isDecrypting, setIsDecrypting] = useState(false);
   const dropdownRef = useRef(null);
 
-  const { auth } = useSelector((store) => store);
-  const { message: messageState } = useSelector((store) => store);
+  const auth = useSelector((store) => store.auth);
+  const messageState = useSelector((store) => store.message);
   const dispatch = useDispatch();
 
   const currentUser = auth?.user;
